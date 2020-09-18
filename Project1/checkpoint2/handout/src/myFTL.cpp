@@ -114,6 +114,7 @@ public:
     std::pair<ExecState, Address>
     WriteTranslate(size_t lba, const ExecCallBack<PageType> &func) {
         printf("************************************************\n");
+        printf("writing %zu\n", lba);
         (void) func;
         if (lba >= available_pages_number) {
             return std::make_pair(ExecState::FAILURE, Address(0, 0, 0, 0, 0));
@@ -128,7 +129,10 @@ public:
             Address old_address = first_write_lba_pba_map.find(lba)->second;
             size_t block_index = tranlateAddressToBlockIndex(old_address);
             if (log_reservation_block_map.find(block_index) == log_reservation_block_map.end()) {
-                printf("2\n");
+                if (overprovision_page_index >= overall_pages_capacity - 1) {
+                    printf("1\n");
+                    return std::make_pair(ExecState::FAILURE, Address(0, 0, 0, 0, 0));
+                }
                 Address new_block_addresss = translatePageNumberToAddress(overprovision_page_index);
                 overprovision_page_index += block_size;
                 unprovision_lba_pba_map[lba] = new_block_addresss;
