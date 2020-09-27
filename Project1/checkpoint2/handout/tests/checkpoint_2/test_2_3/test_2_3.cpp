@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
             if (r != 1) goto failed;
 
             if (page_value1 != page_value2) {
-                fprintf(log_file_stream, "Reading LBA %zu does not get the right value\n", addr);
+                fprintf(log_file_stream, "Reading LBA %zu does not get the right value in test 1\n", addr);
                 goto failed;
             }
 
@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
         r = test.Read(log_file_stream, addr, &page_value);
         if (r != 1) goto failed;
         if (page_value != data[addr]) {
-            fprintf(log_file_stream, "Reading LBA %zu does not get the right value\n", addr);
+            fprintf(log_file_stream, "Reading LBA %zu does not get the right value in test 2\n", addr);
             goto failed;
         }
     }
