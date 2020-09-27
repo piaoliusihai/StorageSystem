@@ -2,6 +2,7 @@
 #include "myFTL.h"
 #include "unordered_map"
 #include "math.h"
+#include <time.h>
 
 template <typename PageType>
 class MyFTL : public FTLBase<PageType> {
@@ -16,6 +17,7 @@ size_t block_erase_count;
 size_t op;
 size_t cleaning_resercation_p;
 size_t gc_policy;
+bool debug_print;
 
 size_t overall_block_capacity;
 size_t overall_pages_capacity;
@@ -29,15 +31,15 @@ size_t log_reservation_block_number;
 size_t upper_threshold_for_log_reservation_page_number;
 
 std::unordered_map<size_t, size_t> first_write_lba_pba_map;
-std::unordered_map<size_t, size_t> first_write_pba_lba_map;
+// std::unordered_map<size_t, size_t> first_write_pba_lba_map;
 std::unordered_map<size_t, size_t> unprovision_lba_pba_map;
 /* block index in available blocks as key, page index in overprovision blocks as value*/
 std::unordered_map<size_t, size_t> log_reservation_block_map;
-/* Frist page in  overprovision blocks key, page in available blocks as value*/
+/* Frist page in overprovision blocks key, page in available blocks as value*/
 std::unordered_map<size_t, size_t> log_reservation_to_available_page_map;
-
 std::unordered_map<size_t, size_t> erase_record_map;
 std::unordered_map<size_t, bool> just_erased_map;
+std::unordered_map<size_t, time_t> lru_record_map;
 // size_t physical_page_index;
 size_t log_reservation_page_index;
 size_t cleaning_reservation_page_index;
@@ -102,6 +104,7 @@ public:
     printf("available_block_number %zu, overprovision_block_number %zu, log_reservation_block_number %zu, cleaning_reservation_block_number %zu\n", available_block_number, 
     overprovision_block_number, log_reservation_block_number, cleaning_reservation_block_number);
     write_index = 0;
+    debug_print = false;
     }
 
     /*
@@ -125,6 +128,7 @@ public:
         (void) lba;
         (void) func;
         /* check if lba is valid*/
+        // printf("Read lba %zu\n", lba);
         if (lba >= available_pages_number) {
             return std::make_pair(ExecState::FAILURE, Address(0, 0, 0, 0, 0));
         }
@@ -132,7 +136,7 @@ public:
             /* Not written in SSD yet*/
             return std::make_pair(ExecState::FAILURE, Address(0, 0, 0, 0, 0));
         } else {
-            Address first_wirte_address = translatePageNumberToAddress(first_write_lba_pba_map.find(lba)->second);
+            Address first_wirte_address = translatePageNumberToAddress(lba);
             if (unprovision_lba_pba_map.find(lba) == unprovision_lba_pba_map.end()) {
                 /* Just read value that have been first witten */
                 return std::make_pair(ExecState::SUCCESS, first_wirte_address);
@@ -153,7 +157,9 @@ public:
     WriteTranslate(size_t lba, const ExecCallBack<PageType> &func) {
         (void) func;
         write_index++;
-        printf("Write index %zu, lba %zu\n", write_index, lba);
+        time_t writeTime;
+        time(&writeTime);
+        // printf("Write index %zu, lba %zu\n", write_index, lba);
         if (lba >= available_pages_number) {
              /* check if lba is valid */
             return std::make_pair(ExecState::FAILURE, Address(0, 0, 0, 0, 0));
@@ -162,22 +168,26 @@ public:
             /* First write*/
             Address new_address = translatePageNumberToAddress(lba);
             first_write_lba_pba_map[lba] = lba;
-            first_write_pba_lba_map[lba] = lba;
+            // first_write_pba_lba_map[lba] = lba;
+            size_t block_index = tranlateAddressToBlockIndex(new_address);
+            if (lru_record_map.find(block_index) != lru_record_map.end()) lru_record_map[block_index] = writeTime;
             // physical_page_index++;
-            printf("Debug in first write\n");
-            debug();
+            if (debug_print) printf("Debug in first write\n");
+            //debug();
             return std::make_pair(ExecState::SUCCESS, new_address);
         } else {
             /* lba written before*/
             size_t old_physical_page_index = first_write_lba_pba_map.find(lba)->second;
             Address old_address = translatePageNumberToAddress(old_physical_page_index );
             size_t block_index = tranlateAddressToBlockIndex(old_address);
+            lru_record_map[block_index] = writeTime;
             if (log_reservation_block_map.find(block_index) == log_reservation_block_map.end()) {
                 /* This block has no corresponding overprovision block, cleaning here*/
                 if (log_reservation_page_index >= upper_threshold_for_log_reservation_page_number || 
                     log_reservation_to_available_page_map.find(log_reservation_page_index) != log_reservation_to_available_page_map.end()) {
                     /* overprovision block used up */
-                    roundRobinGarbageCollection(func);
+                    if (gc_policy == 0) roundRobinGarbageCollection(func);
+                    else if (gc_policy == 1) lruGarbageCollection(func);
                     return WriteTranslate(lba, func);
                 }
                 /* Assign new overprovision block */
@@ -186,8 +196,8 @@ public:
                 log_reservation_block_map[block_index] = log_reservation_page_index;
                 log_reservation_to_available_page_map[log_reservation_page_index] = old_physical_page_index;
                 log_reservation_page_index += block_size;
-                printf("Debug in first write to new overprovision block\n");
-                debug();
+                if (debug_print) printf("Debug in first write to new overprovision block\n");
+                // debug();
                 return std::make_pair(ExecState::SUCCESS, new_block_addresss);
             } else {
                 /* This block has corresponding overprovision block*/
@@ -196,12 +206,9 @@ public:
                 size_t block_index_in_overprovision = tranlateAddressToBlockIndex(overprovision_page_address);
                 if (overprovision_page_address.page >= block_size - 1) {
                     /* corresponding overprovision block is full*/
-                    cleaning_reservation_page_index = cleaningForFullLogReservationBlock(cleaning_reservation_page_index, block_index, func, overprovision_page_address);
-                    if (cleaning_reservation_page_index >= overall_pages_capacity) {
-                        cleaning_reservation_page_index = upper_threshold_for_log_reservation_page_number;
-                    }
-                    printf("Debug after erase in corresponding block\n");
-                    debug();
+                    cleaningForFullLogReservationBlock(block_index, overprovision_page_address, func);
+                    if (debug_print)  printf("Debug after erase in corresponding block\n");
+                    // debug();
                     return WriteTranslate(lba, func);
                 } else {
                     /* corresponding overprovision block is not full*/
@@ -212,16 +219,16 @@ public:
                             overprovision_page_address.plane, overprovision_page_address.block, overprovision_page_address.page);
                         unprovision_lba_pba_map[lba] = overprovision_page_index;
                         log_reservation_block_map[block_index] = overprovision_page_index;
-                        printf("Debug in writing to unfull block in overprovision\n");
-                        debug();
+                        if (debug_print)  printf("Debug in writing to unfull block in overprovision\n");
+                        // debug();
                         return std::make_pair(ExecState::SUCCESS, new_overprovision_page_address);
                     } else {
                         Address new_overprovision_page_address = Address(overprovision_page_address.package, overprovision_page_address.die, 
                             overprovision_page_address.plane, overprovision_page_address.block, overprovision_page_address.page + 1);
                         unprovision_lba_pba_map[lba] = overprovision_page_index + 1;
                         log_reservation_block_map[block_index] = overprovision_page_index + 1;
-                        printf("Debug in writing to unfull block in overprovision\n");
-                        debug();
+                        if (debug_print) printf("Debug in writing to unfull block in overprovision\n");
+                        // debug();
                         return std::make_pair(ExecState::SUCCESS, new_overprovision_page_address);
                     }
                 }
@@ -230,86 +237,94 @@ public:
         return std::make_pair(ExecState::SUCCESS,Address(0, 0, 0, 0, 0));
     }
 
-    void roundRobinGarbageCollection(const ExecCallBack<PageType> &func) {
-        size_t start_page_for_overprovision_block = garbage_collection_log_reservation_page_index;
-        size_t page_in_available_block = log_reservation_to_available_page_map.find(start_page_for_overprovision_block)->second;
-        size_t curr_cleaning_page_index = cleaning_reservation_page_index;
-        size_t old_block_index = tranlateAddressToBlockIndex(translatePageNumberToAddress(page_in_available_block));
-        size_t start_page_for_original_block = old_block_index * block_size;
-        Address overprovision_page_address = translatePageNumberToAddress(start_page_for_overprovision_block);
-        std::unordered_map<size_t, size_t> copy_map;
-        std::unordered_map<size_t, size_t> corresponding_map;
-        printf("Enter Garbage Collection\n");
-        for (size_t i = start_page_for_original_block ; i < start_page_for_original_block + block_size; i++) {
-            if (first_write_pba_lba_map.find(i) != first_write_pba_lba_map.end()) {
-                size_t lba = first_write_pba_lba_map.find(i)->second;
-                if (unprovision_lba_pba_map.find(lba) == unprovision_lba_pba_map.end()) {
-                    copy_map[curr_cleaning_page_index] = i;
-                    corresponding_map[curr_cleaning_page_index] = i;
-                    curr_cleaning_page_index++;
-                } else {
-                    size_t pba_in_overprovision = unprovision_lba_pba_map.find(lba)->second;
-                    unprovision_lba_pba_map.erase(lba);
-                    copy_map[curr_cleaning_page_index] = pba_in_overprovision;
-                    corresponding_map[curr_cleaning_page_index] = i;
-                    curr_cleaning_page_index++;
-                }
+    void lruGarbageCollection(const ExecCallBack<PageType> &func) {
+        printf("Enter lruGarbageCollection\n");
+        time_t leastTime;
+        time(&leastTime);
+        size_t lru_block;
+        for (auto it = lru_record_map.begin(); it != lru_record_map.end(); ++it) {
+            size_t used_block = it->first, used_time = it->second;
+            if (used_time < leastTime) {
+                leastTime = used_time;
+                lru_block = used_block;
             }
         }
-        if (copy_map.size() == 1) {
-            log_reservation_block_map.erase(old_block_index);
-            log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
-            func(OpCode::ERASE, translatePageNumberToAddress(start_page_for_original_block));
-            for (auto it = copy_map.begin(); it !=copy_map.end(); ++it) {
-                func(OpCode::READ, translatePageNumberToAddress(it->second));
-                Address original = translatePageNumberToAddress(corresponding_map.find(it->first)->second);
-                func(OpCode::WRITE, original);
-            }
-            func(OpCode::ERASE,  overprovision_page_address);
+        printf("Found LRU block in lruGarbageCollection, lru block to erase %zu\n", lru_block);
+        size_t start_page_for_original_block = lru_block * block_size;
+        size_t start_page_for_overprovision_block = tranlateAddressToBlockIndex(translatePageNumberToAddress(log_reservation_block_map.find(lru_block)->second));
+        bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
+        if (usedCleaningBlock) {
             garbage_collection_log_reservation_page_index += block_size;
             if (garbage_collection_log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) {
                 garbage_collection_log_reservation_page_index = available_pages_number;
             }
-            if (log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) log_reservation_page_index = available_pages_number;
-        } else {
-            log_reservation_block_map.erase(old_block_index);
-            log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
-            for (auto it = copy_map.begin(); it !=copy_map.end(); ++it) {
-                func(OpCode::READ, translatePageNumberToAddress(it->second));
-                func(OpCode::WRITE, translatePageNumberToAddress(it->first));
-            }
-            func(OpCode::ERASE, overprovision_page_address);
-            func(OpCode::ERASE, translatePageNumberToAddress(start_page_for_original_block));
-            for (auto it = corresponding_map.begin(); it !=corresponding_map.end(); ++it) {
-                func(OpCode::READ, translatePageNumberToAddress(it->first));
-                func(OpCode::WRITE, translatePageNumberToAddress(it->second));
-            }
-            func(OpCode::ERASE, translatePageNumberToAddress(curr_cleaning_page_index));
+        }
+        log_reservation_block_map.erase(lru_block);
+        log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
+        log_reservation_page_index = start_page_for_overprovision_block;
+    }
+
+    void roundRobinGarbageCollection(const ExecCallBack<PageType> &func) {
+        printf("Enter roundRobinGarbageCollection\n");
+        size_t start_page_for_overprovision_block = garbage_collection_log_reservation_page_index;
+        size_t page_in_available_block = log_reservation_to_available_page_map.find(start_page_for_overprovision_block)->second;
+        size_t old_block_index = tranlateAddressToBlockIndex(translatePageNumberToAddress(page_in_available_block));
+        size_t start_page_for_original_block = old_block_index * block_size;
+        size_t block_index_in_overprovision = tranlateAddressToBlockIndex(translatePageNumberToAddress(start_page_for_overprovision_block));
+        // printf("start_page_for_original_block %zu, block_index_in_overprovision %zu, start_page_for_overprovision_block %zu\n", start_page_for_original_block, 
+        //  block_index_in_overprovision, start_page_for_overprovision_block);
+        bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
+        if (usedCleaningBlock) {
             garbage_collection_log_reservation_page_index += block_size;
+            if (garbage_collection_log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) {
+                garbage_collection_log_reservation_page_index = available_pages_number;
+            }
+        }
+        log_reservation_block_map.erase(old_block_index);
+        log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
+        if (log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) log_reservation_page_index = available_pages_number;
+    }
+
+    void cleaningForFullLogReservationBlock(size_t old_block_index, Address overprovision_page_address, const ExecCallBack<PageType> &func) {
+        // printf("Enter Erase\n");
+        size_t start_page_for_original_block = old_block_index * block_size;
+        size_t block_index_in_overprovision = tranlateAddressToBlockIndex(overprovision_page_address);
+        size_t start_page_for_overprovision_block = block_index_in_overprovision * block_size;
+        // printf("start_page_for_original_block %zu, block_index_in_overprovision %zu, start_page_for_overprovision_block %zu\n", start_page_for_original_block, 
+        // block_index_in_overprovision, start_page_for_overprovision_block);
+        bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
+        if (usedCleaningBlock) {
             cleaning_reservation_page_index += block_size;
             if (cleaning_reservation_page_index >= overall_pages_capacity) {
                 cleaning_reservation_page_index = upper_threshold_for_log_reservation_page_number;
             }
-            if (log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) log_reservation_page_index = available_pages_number;
         }
-
+        just_erased_map[block_index_in_overprovision] = true;
+        log_reservation_block_map[old_block_index] = start_page_for_overprovision_block;
     }
 
-    size_t cleaningForFullLogReservationBlock(size_t cleaning_reservation_page_index, size_t old_block_index, const ExecCallBack<PageType> &func, Address overprovision_page_address) {
-        size_t start_page_for_original_block = old_block_index * block_size;
-        size_t start_page_for_overprovision_block = tranlateAddressToBlockIndex(overprovision_page_address) * block_size;
+    bool performErase(size_t cleaning_reservation_page_index, size_t start_page_for_original_block, size_t start_page_for_overprovision_block, const ExecCallBack<PageType> &func) {
         size_t curr_cleaning_page_index = cleaning_reservation_page_index;
+        Address overprovision_page_address = translatePageNumberToAddress(start_page_for_overprovision_block);
         std::unordered_map<size_t, size_t> copy_map;
         std::unordered_map<size_t, size_t> corresponding_map;
-        printf("Enter Erase\n");
-        for (size_t i = start_page_for_original_block ; i < start_page_for_original_block + block_size; i++) {
-            if (first_write_pba_lba_map.find(i) != first_write_pba_lba_map.end()) {
-                size_t lba = first_write_pba_lba_map.find(i)->second;
+        bool ans = false;
+        // printf("unprovision_lba_pba_map\n");
+        // for (auto it = unprovision_lba_pba_map.begin(); it != unprovision_lba_pba_map.end(); ++it) {
+        //     printf("lba %zu, pga %zu \n", it->first, it->second);
+        // }
+        for (size_t i = start_page_for_original_block; i < start_page_for_original_block + block_size; i++) {
+            // printf("performe i %zu\n", i);
+            if (first_write_lba_pba_map.find(i) != first_write_lba_pba_map.end()) {
+                size_t lba = first_write_lba_pba_map.find(i)->second;
                 if (unprovision_lba_pba_map.find(lba) == unprovision_lba_pba_map.end()) {
+                    // printf("performe lba %zu without unprovision_lba_pba_map.\n", lba);
                     copy_map[curr_cleaning_page_index] = i;
                     corresponding_map[curr_cleaning_page_index] = i;
                     curr_cleaning_page_index++;
                 } else {
+                    // printf("performe lba %zu\n", lba);
+                    // printf("performe erase %zu\n", lba);
                     size_t pba_in_overprovision = unprovision_lba_pba_map.find(lba)->second;
                     unprovision_lba_pba_map.erase(lba);
                     copy_map[curr_cleaning_page_index] = pba_in_overprovision;
@@ -319,7 +334,6 @@ public:
             }
         }
         if (copy_map.size() == 1) {
-            log_reservation_block_map[old_block_index] = start_page_for_overprovision_block;
             func(OpCode::ERASE, translatePageNumberToAddress(start_page_for_original_block));
             for (auto it = copy_map.begin(); it !=copy_map.end(); ++it) {
                 func(OpCode::READ, translatePageNumberToAddress(it->second));
@@ -327,9 +341,8 @@ public:
                 func(OpCode::WRITE, original);
             }
             func(OpCode::ERASE, overprovision_page_address);
-            return cleaning_reservation_page_index;
         } else {
-            log_reservation_block_map[old_block_index] = start_page_for_overprovision_block;
+            ans = true;
             for (auto it = copy_map.begin(); it !=copy_map.end(); ++it) {
                 func(OpCode::READ, translatePageNumberToAddress(it->second));
                 func(OpCode::WRITE, translatePageNumberToAddress(it->first));
@@ -341,12 +354,11 @@ public:
                 func(OpCode::WRITE, translatePageNumberToAddress(it->second));
             }
             func(OpCode::ERASE, translatePageNumberToAddress(curr_cleaning_page_index));
-            cleaning_reservation_page_index += block_size;
-            size_t block_index_in_overprovision = tranlateAddressToBlockIndex(overprovision_page_address);
-            just_erased_map[block_index_in_overprovision] = true;
-            return cleaning_reservation_page_index;
         }
+        debug();
+        return ans;
     }
+
      /* 
      * Thanslate address to physical page index
      */
