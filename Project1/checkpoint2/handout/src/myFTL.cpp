@@ -262,7 +262,7 @@ public:
         time(&currTime);
         std::unordered_map<size_t, double> cost_benefit_ratio_map;
         for (auto it = log_reservation_to_available_page_map.begin(); it != log_reservation_to_available_page_map.end(); ++it) {
-            size_t original_block_index = translateAddressToBlockIndex(translatePageNumberToAddress(it->second));
+            size_t original_block_index = getBlockIndex(it->second);
             size_t valid_page_number = 0;
             for (size_t original_page_index = original_block_index * block_size; original_page_index < original_block_index * block_size + block_size; original_page_index++) {
                 if (first_write_lba_pba_map.find(original_page_index) != first_write_lba_pba_map.end()) {
@@ -290,7 +290,7 @@ public:
         }
         printf("Found LRU block in lruGarbageCollection, lru block to erase %zu\n", lru_block);
         size_t start_page_for_original_block = lru_block * block_size;
-        size_t start_page_for_overprovision_block = translateAddressToBlockIndex(translatePageNumberToAddress(log_reservation_block_map.find(lru_block)->second));
+        size_t start_page_for_overprovision_block = getBlockIndex(log_reservation_block_map.find(lru_block)->second);
         bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
         if (usedCleaningBlock) {
             garbage_collection_log_reservation_page_index += block_size;
@@ -307,9 +307,9 @@ public:
         printf("Enter roundRobinGarbageCollection\n");
         size_t start_page_for_overprovision_block = garbage_collection_log_reservation_page_index;
         size_t page_in_available_block = log_reservation_to_available_page_map.find(start_page_for_overprovision_block)->second;
-        size_t old_block_index = translateAddressToBlockIndex(translatePageNumberToAddress(page_in_available_block));
+        size_t old_block_index = getBlockIndex(page_in_available_block);
         size_t start_page_for_original_block = old_block_index * block_size;
-        size_t block_index_in_overprovision = translateAddressToBlockIndex(translatePageNumberToAddress(start_page_for_overprovision_block));
+        size_t block_index_in_overprovision = getBlockIndex(start_page_for_overprovision_block);
         // printf("start_page_for_original_block %zu, block_index_in_overprovision %zu, start_page_for_overprovision_block %zu\n", start_page_for_original_block, 
         //  block_index_in_overprovision, start_page_for_overprovision_block);
         bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
@@ -409,8 +409,7 @@ public:
     }
 
     void updateEraseEecordMap(size_t page_index) {
-        size_t block_index = translateAddressToBlockIndex(translatePageNumberToAddress(page_index));
-        assert(block_index == getBlockIndex(page_index));
+        size_t block_index = getBlockIndex(page_index);
         if (erase_record_map.find(block_index) == erase_record_map.end()) {
             erase_record_map[block_index] = 1;
         } else {
