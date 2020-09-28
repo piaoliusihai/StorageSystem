@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     size_t num_block_touched = 0;
     FlashSimTest test(argv[1]);
-    while (test.TotalErasesPerformed() == 0) {
+    while (test.TotalErasesPerformed() <= 10) {
         if (num_block_touched <= num_nondata_blocks) {
             const size_t addr = num_block_touched * BLOCK_SIZE;
             TEST_PAGE_TYPE page_value1 = rand() % 18746;

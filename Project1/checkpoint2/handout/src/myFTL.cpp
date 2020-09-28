@@ -39,7 +39,7 @@ std::unordered_map<size_t, size_t> log_reservation_block_map;
 std::unordered_map<size_t, size_t> log_reservation_to_available_page_map;
 std::unordered_map<size_t, size_t> erase_record_map;
 std::unordered_map<size_t, bool> just_erased_map;
-std::unordered_map<size_t, time_t> lru_record_map;
+std::unordered_map<size_t, size_t> lru_record_map;
 // size_t physical_page_index;
 size_t log_reservation_page_index;
 size_t cleaning_reservation_page_index;
@@ -171,7 +171,7 @@ public:
             first_write_lba_pba_map[lba] = lba;
             // first_write_pba_lba_map[lba] = lba;
             size_t block_index = translateAddressToBlockIndex(new_address);
-            if (lru_record_map.find(block_index) != lru_record_map.end()) lru_record_map[block_index] = writeTime;
+            if (lru_record_map.find(block_index) != lru_record_map.end()) lru_record_map[block_index] = write_index;
             // physical_page_index++;
             if (debug_print) {
                 printf("Debug in first write\n");
@@ -183,7 +183,7 @@ public:
             size_t old_physical_page_index = first_write_lba_pba_map.find(lba)->second;
             Address old_address = translatePageNumberToAddress(old_physical_page_index );
             size_t block_index = translateAddressToBlockIndex(old_address);
-            lru_record_map[block_index] = writeTime;
+            lru_record_map[block_index] = write_index;
             if (log_reservation_block_map.find(block_index) == log_reservation_block_map.end()) {
                 /* This block has no corresponding overprovision block, cleaning here*/
                 if (log_reservation_page_index >= upper_threshold_for_log_reservation_page_number || 
@@ -191,7 +191,8 @@ public:
                     /* overprovision block used up */
                     if (gc_policy == 0) roundRobinGarbageCollection(func);
                     else if (gc_policy == 1) lruGarbageCollection(func);
-                    else if (gc_policy == 3) lfsCostBenifitGarbageCollection(func);
+                    else if (gc_policy == 3) lfsCostBenefitGarbageCollection(func);
+                    else if (gc_policy == 2) greedyGarbageCollection(func);
                     return WriteTranslate(lba, func);
                 }
                 /* Assign new overprovision block */
@@ -256,11 +257,9 @@ public:
         return std::make_pair(ExecState::SUCCESS,Address(0, 0, 0, 0, 0));
     }
 
-    void lfsCostBenifitGarbageCollection(const ExecCallBack<PageType> &func) {
-        printf("Enter lfsCostBenifitGarbageCollection\n");
-        time_t currTime;
-        time(&currTime);
-        std::unordered_map<size_t, double> cost_benefit_ratio_map;
+    void greedyGarbageCollection(const ExecCallBack<PageType> &func) {
+        size_t min_valid_pages_number = block_size;
+        size_t min_valid_block_index = 0;
         for (auto it = log_reservation_to_available_page_map.begin(); it != log_reservation_to_available_page_map.end(); ++it) {
             size_t original_block_index = getBlockIndex(it->second);
             size_t valid_page_number = 0;
@@ -269,19 +268,75 @@ public:
                     valid_page_number++;
                 }
             }
-            double utilization = (double) valid_page_number / (2 * block_size);
-            double cost_benefit = (1 - utilization) / (1 + utilization) * ((double) (currTime - lru_record_map.find(original_block_index)->second));
-            cost_benefit_ratio_map[original_block_index] = cost_benefit;
-            printf("valid number %zu, utilization %f, cost_benefit %f, currTime %zu, beforeTIme %zu\n", valid_page_number, utilization, cost_benefit, currTime, lru_record_map.find(original_block_index)->second);
+            if (valid_page_number < min_valid_pages_number) {
+                min_valid_pages_number = valid_page_number;
+                min_valid_block_index = original_block_index;
+            }
         }
+        size_t start_page_for_original_block = min_valid_block_index * block_size;
+        size_t start_page_for_overprovision_block = getBlockIndex(log_reservation_block_map.find(min_valid_block_index)->second) * block_size;
+        bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
+        if (usedCleaningBlock) {
+            garbage_collection_log_reservation_page_index += block_size;
+            if (garbage_collection_log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) {
+                garbage_collection_log_reservation_page_index = available_pages_number;
+            }
+        }
+        log_reservation_block_map.erase(min_valid_block_index);
+        log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
+        log_reservation_page_index = start_page_for_overprovision_block;
+    }
+
+    void lfsCostBenefitGarbageCollection(const ExecCallBack<PageType> &func) {
+        printf("Enter lfsCostBenefitGarbageCollection\n");
+        time_t currTime;
+        time(&currTime);
+        std::unordered_map<size_t, double> cost_benefit_ratio_map;
+        for (auto it = log_reservation_to_available_page_map.begin(); it != log_reservation_to_available_page_map.end(); ++it) {
+            printf("overprovision page index %zu, original page index%zu\n", it->first, it->second);
+            size_t original_block_index = getBlockIndex(it->second);
+            size_t valid_page_number = 0;
+            for (size_t original_page_index = original_block_index * block_size; original_page_index < original_block_index * block_size + block_size; original_page_index++) {
+                if (first_write_lba_pba_map.find(original_page_index) != first_write_lba_pba_map.end()) {
+                    valid_page_number++;
+                }
+            }
+            double utilization = (double) valid_page_number / (2 * block_size);
+            double cost_benefit = (1 - utilization) / (1 + utilization) * ((double) (write_index - lru_record_map.find(original_block_index)->second));
+            cost_benefit_ratio_map[original_block_index] = cost_benefit;
+            printf("valid number %zu, utilization %f, cost_benefit %f, currTime %zu, beforeTIme %zu\n", valid_page_number, utilization, cost_benefit, write_index , lru_record_map.find(original_block_index)->second);
+        }
+        double max_ratio = 0;
+        size_t max_ratio_block_index = 0;
+        for (auto it = cost_benefit_ratio_map.begin(); it != cost_benefit_ratio_map.end(); ++it) {
+            size_t original_block_index = it->first;
+            double curr_ratio = it->second;
+            if (curr_ratio > max_ratio) {
+                max_ratio_block_index = original_block_index;
+                max_ratio = curr_ratio;
+            }
+        }
+        size_t start_page_for_original_block = max_ratio_block_index * block_size;
+        size_t start_page_for_overprovision_block = getBlockIndex(log_reservation_block_map.find(max_ratio_block_index)->second) * block_size;
+        bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
+        if (usedCleaningBlock) {
+            garbage_collection_log_reservation_page_index += block_size;
+            if (garbage_collection_log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) {
+                garbage_collection_log_reservation_page_index = available_pages_number;
+            }
+        }
+        lru_record_map.erase(max_ratio_block_index);
+        log_reservation_block_map.erase(max_ratio_block_index);
+        log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
+        log_reservation_page_index = start_page_for_overprovision_block;
     }
 
     void lruGarbageCollection(const ExecCallBack<PageType> &func) {
         if (debug_print) {
             printf("Enter lruGarbageCollection\n");
         }
-        time_t leastTime;
-        time(&leastTime);
+        size_t leastTime = write_index;
+        // time(&leastTime);
         size_t lru_block;
         for (auto it = lru_record_map.begin(); it != lru_record_map.end(); ++it) {
             size_t used_block = it->first, used_time = it->second;
@@ -290,11 +345,9 @@ public:
                 lru_block = used_block;
             }
         }
-         if (debug_print) { 
-            printf("Found LRU block in lruGarbageCollection, lru block to erase %zu\n", lru_block);
-         }
+        printf("Found LRU block in lruGarbageCollection, lru block to erase %zu\n", lru_block);
         size_t start_page_for_original_block = lru_block * block_size;
-        size_t start_page_for_overprovision_block = getBlockIndex(log_reservation_block_map.find(lru_block)->second);
+        size_t start_page_for_overprovision_block = getBlockIndex(log_reservation_block_map.find(lru_block)->second) * block_size;
         bool usedCleaningBlock = performErase(cleaning_reservation_page_index, start_page_for_original_block, start_page_for_overprovision_block, func);
         if (usedCleaningBlock) {
             garbage_collection_log_reservation_page_index += block_size;
@@ -302,6 +355,7 @@ public:
                 garbage_collection_log_reservation_page_index = available_pages_number;
             }
         }
+        lru_record_map.erase(lru_block);
         log_reservation_block_map.erase(lru_block);
         log_reservation_to_available_page_map.erase(start_page_for_overprovision_block);
         log_reservation_page_index = start_page_for_overprovision_block;
