@@ -33,12 +33,15 @@ size_t upper_threshold_for_log_reservation_page_number;
 std::unordered_map<size_t, size_t> first_write_lba_pba_map;
 // std::unordered_map<size_t, size_t> first_write_pba_lba_map;
 std::unordered_map<size_t, size_t> unprovision_lba_pba_map;
-/* block index in available blocks as key, page index in overprovision blocks as value*/
+/* block index in available blocks as key, page index in overprovision blocks as value */
 std::unordered_map<size_t, size_t> log_reservation_block_map;
-/* Frist page in overprovision blocks key, page in available blocks as value*/
+/* Frist page in overprovision blocks key, page in available blocks as value */
 std::unordered_map<size_t, size_t> log_reservation_to_available_page_map;
+/* To record erase time for this block, key is block index, to determine wear out */
 std::unordered_map<size_t, size_t> erase_record_map;
+/* Used to help write just after free an oeverprovision block for this page */
 std::unordered_map<size_t, bool> just_erased_map;
+/* key block index, value timestamp, every write time plus one */
 std::unordered_map<size_t, size_t> lru_record_map;
 // size_t physical_page_index;
 size_t log_reservation_page_index;
@@ -47,7 +50,6 @@ size_t write_index;
 size_t garbage_collection_log_reservation_page_index;
 
 public:
-
     /*
      * Constructor
      */
@@ -105,7 +107,7 @@ public:
     overprovision_block_number, log_reservation_block_number, cleaning_reservation_block_number);
     printf("cleaning_reservation_page_index %zu, log_reservation_page_index %zu, overall_pages_capacity %zu\n", cleaning_reservation_page_index, log_reservation_page_index, overall_pages_capacity);
     write_index = 0;
-    debug_print = false;
+    debug_print = true;
     }
 
     /*
@@ -257,6 +259,9 @@ public:
         return std::make_pair(ExecState::SUCCESS,Address(0, 0, 0, 0, 0));
     }
 
+    /*
+     * Grabage collection policy greedy
+     */
     void greedyGarbageCollection(const ExecCallBack<PageType> &func) {
         size_t min_valid_pages_number = block_size;
         size_t min_valid_block_index = 0;
@@ -287,6 +292,9 @@ public:
         log_reservation_page_index = start_page_for_overprovision_block;
     }
 
+    /*
+     * Grabage collection policy LFS Cost Benefit
+     */
     void lfsCostBenefitGarbageCollection(const ExecCallBack<PageType> &func) {
         printf("Enter lfsCostBenefitGarbageCollection\n");
         time_t currTime;
@@ -331,6 +339,9 @@ public:
         log_reservation_page_index = start_page_for_overprovision_block;
     }
 
+    /*
+     * Grabage collection policy LRU Cost Benefit
+     */
     void lruGarbageCollection(const ExecCallBack<PageType> &func) {
         if (debug_print) {
             printf("Enter lruGarbageCollection\n");
@@ -361,6 +372,9 @@ public:
         log_reservation_page_index = start_page_for_overprovision_block;
     }
 
+    /*
+     * Grabage collection policy LRU Cost Benefit
+     */
     void roundRobinGarbageCollection(const ExecCallBack<PageType> &func) {
         if (debug_print) {
             printf("Enter roundRobinGarbageCollection\n");
@@ -384,6 +398,9 @@ public:
         if (log_reservation_page_index >= upper_threshold_for_log_reservation_page_number) log_reservation_page_index = available_pages_number;
     }
 
+    /*
+     * Used by those garbage collection policy
+     */
     bool cleaningForFullLogReservationBlock(size_t old_block_index, Address overprovision_page_address, const ExecCallBack<PageType> &func) {
         if (debug_print) {
             printf("Enter Erase\n");
@@ -467,6 +484,9 @@ public:
         return ans;
     }
 
+    /* 
+     * Determine not reach erase limit, return true if not.
+     */
     bool notReachEraseLimit(size_t page_index ) {
         size_t block_index = getBlockIndex(page_index);
         if (erase_record_map.find(block_index) != erase_record_map.end() && erase_record_map.find(block_index)->second >= block_erase_count) {
@@ -475,6 +495,10 @@ public:
         return true;
     }
 
+
+    /* 
+     * Update EraseEecordMap
+     */
     void updateEraseEecordMap(size_t page_index) {
         size_t block_index = getBlockIndex(page_index);
         if (erase_record_map.find(block_index) == erase_record_map.end()) {
@@ -485,6 +509,9 @@ public:
         }
     }
 
+    /* 
+     * Get block index
+     */
     size_t getBlockIndex(size_t page_index) {
         return page_index / block_size;
     }
