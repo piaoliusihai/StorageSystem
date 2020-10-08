@@ -1,0 +1,84 @@
+Garbage Collection Policy 0
+
+Memory usage: 1759232 bytes
+Endurance Score: 30.416406/40
+Amp Score: 40.000000/40
+Mem Score: 3.725262/20
+Total Score: 74/100
+
+Memory usage: 1804288 bytes
+Endurance Score: 9.435000/40
+Amp Score: 40.000000/40
+Mem Score: 3.632236/20
+Total Score: 53/100
+
+Memory usage: 10240 bytes
+Endurance Score: 0.090234/40
+Amp Score: 40.000000/40
+Mem Score: 20.000000/20
+Total Score: 60/100
+
+
+Garbage Collection Policy 1
+
+Memory usage: 1759232 bytes
+Endurance Score: 30.416406/40
+Amp Score: 40.000000/40
+Mem Score: 3.725262/20
+Total Score: 74/100
+
+Memory usage: 1804288 bytes
+Endurance Score: 9.435000/40
+Amp Score: 40.000000/40
+Mem Score: 3.632236/20
+Total Score: 53/100
+
+Memory usage: 10240 bytes
+Endurance Score: 0.090234/40
+Amp Score: 40.000000/40
+Mem Score: 20.000000/20
+Total Score: 60/100
+
+
+Garbage Collection Policy 2
+
+Memory usage: 1759232 bytes
+Endurance Score: 30.416406/40
+Amp Score: 40.000000/40
+Mem Score: 3.725262/20
+Total Score: 74/10
+
+Memory usage: 1804288 bytes
+Endurance Score: 9.435000/40
+Amp Score: 40.000000/40
+Mem Score: 3.632236/20
+Total Score: 53/100
+
+Memory usage: 10240 bytes
+Endurance Score: 0.090234/40
+Amp Score: 40.000000/40
+Mem Score: 20.000000/20
+Total Score: 60/100
+
+Garbage Collection Policy 3
+
+Memory usage: 1763328 bytes
+Endurance Score: 30.416406/40
+Amp Score: 40.000000/40
+Mem Score: 3.716609/20
+Total Score: 74/100
+
+Memory usage: 1805312 bytes
+Endurance Score: 9.435000/40
+Amp Score: 40.000000/40
+Mem Score: 3.630176/20
+Total Score: 53/100
+
+Memory usage: 10240 bytes
+Endurance Score: 0.090234/40
+Amp Score: 40.000000/40
+Mem Score: 20.000000/20
+Total Score: 60/100
+
+
+
