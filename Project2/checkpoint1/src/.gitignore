@@ -1,0 +1,9 @@
+build
+
+# Output files
+*.a
+*.o
+dedup-lib/rabin-example
+
+# snapshot binary
+scripts/snapshot
