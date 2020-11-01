@@ -431,14 +431,24 @@ int cloudfs_readlink(const char *, char *, size_t) {
   return 0;
 }
 
-int cloudfs_unlink(const char *) {
-  log_msg(logfile, "cloudfs_unlink called!\n");
-  return 0;
+/*
+ * Linux Reference: https://linux.die.net/man/2/unlink
+ */
+int cloudfs_unlink(const char *path) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_unlink", fpath, path);
+  log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
+  return log_syscall("cloudfs_unlink", unlink(fpath), 0);
 }
 
-int cloudfs_rmdir(const char *) {
-  log_msg(logfile, "cloudfs_rmdir called!\n");
-  return 0;
+/*
+ * Linux Reference: https://linux.die.net/man/2/rmdir
+ */
+int cloudfs_rmdir(const char *path) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_rmdir", fpath, path);
+  log_msg(logfile, "\ncloudfs_rmdir(path=\"%s\")\n", fpath);
+  return log_syscall("cloudfs_rmdir", rmdir(fpath), 0);
 }
 
 int cloundfs_truncate(const char *, off_t) {
