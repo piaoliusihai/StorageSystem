@@ -69,6 +69,7 @@
         "unordered_set": "cpp",
         "vector": "cpp",
         "numeric": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "filesystem": "cpp"
     }
 }
