@@ -47,27 +47,44 @@ int test() {
   cloud_print_error();
 
   printf("Create bucket\n");
-  cloud_create_bucket("test");
+  cloud_create_bucket("test2");
   cloud_print_error();
 
   cloud_list_service(list_service);
   cloud_print_error();
 
   printf("Put object\n");
-  infile = fopen("./README", "rb");
+  infile = fopen("/home/student/Project/Project2/checkpoint1/src/tests/checkpoint_1/test_1_2/big_test/a/big1", "rb");
   if(infile == NULL)
   {
     printf("File not found.");
     return 1;
   }
   struct stat stat_buf;
+  lstat("/home/student/Project/Project2/checkpoint1/src/tests/checkpoint_1/test_1_2/big_test/a/big1", &stat_buf);
+  printf("%d\n", stat_buf.st_size);
+  cloud_put_object("test2", "helloworld", stat_buf.st_size, put_buffer);
+  fclose(infile);
+  // int fd = open("/home/student/Project/Project2/checkpoint1/src/tests/checkpoint_1/test_1_2/big_test/a/big1", O_RDWR);
+  // ftruncate(fd,0);
+  // lseek(fd,0,SEEK_SET);
+  // close(fd);
+  
+  cloud_print_error();
+
+  infile = fopen("./README", "rb");
+  if(infile == NULL)
+  {
+    printf("File not found.");
+    return 1;
+  }
   lstat("./README", &stat_buf);
-  cloud_put_object("test", "helloworld", stat_buf.st_size, put_buffer);
+  cloud_put_object("test2", "helloworld2", stat_buf.st_size, put_buffer);
   fclose(infile);
   cloud_print_error();
 
   printf("List bucket test:\n");
-  cloud_list_bucket("test", list_bucket);
+  cloud_list_bucket("test2", list_bucket);
 
   printf("Get object:\n");
   outfile = fopen("/tmp/README", "wb");

@@ -23,6 +23,7 @@
 #include <sys/time.h>
 #include <fcntl.h> /* Definition of AT_* constants */
 #include <sys/stat.h>
+#include "libs3.h"
 
 #define UNUSED __attribute__((unused))
 
@@ -31,6 +32,8 @@
 
 static struct cloudfs_state state_;
 static FILE *logfile;
+static FILE *infile;
+static FILE *outfile;
 
 void log_msg(FILE *logfile, const char *format, ...)
 {
@@ -157,6 +160,59 @@ void log_fi (struct fuse_file_info *fi)
 	log_struct(fi, lock_owner, 0x%016llx, );
 }
 
+int put_buffer_in_cloud(char *buffer, int bufferLength) {
+  int retstat = fread(buffer, 1, bufferLength, infile);
+  log_msg(logfile, "put_buffer %d, retstat %d\n", bufferLength, retstat);
+  return retstat;
+}
+
+int get_buffer_save_in_file(const char *buffer, int bufferLength) {
+  log_msg(logfile, "get_buffer %d\n", bufferLength);
+  int retstat = fwrite(buffer, 1, bufferLength, outfile);
+  return retstat;
+}
+
+int cloudfs_list_bucket(const char *key, time_t modified_time, uint64_t size) {
+  log_msg(logfile, "cloudfs_list_bucket\n");
+  log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
+  return 0;
+}
+
+int cloudfs_list_service(const char *bucketName) {
+  log_msg(logfile, "%s\n", bucketName);
+  return 0; 
+}
+
+void generate_bucket_name(const char *path, char bucket_name[PATH_MAX], char file_name[PATH_MAX]) {
+  int last_slash_index = 0;
+  for (int i = 0; i < strlen(path); i++) {
+    if (path[i] == '/') {
+      last_slash_index = i;
+    }
+  }
+  int i = 0, j = 0;
+  if (path[i] == '/') i++;
+  for (; i <= last_slash_index; i++, j++) {
+    if (path[i] == '/') {
+      bucket_name[j] = '-';
+    } else {
+      bucket_name[j] = path[i];
+    }
+  }
+  bucket_name[j] = '\0';
+  i = 0;
+  j = last_slash_index + 1;
+  for (; j < strlen(path); j++, i++) {
+    if (path[j] == '/') {
+      file_name[j] = '-';
+    } else {
+      file_name[i] = path[j];
+    }
+  }
+  file_name[i] = '\0';
+  log_msg(logfile, "\ngenerate_bucket_name(path=\"%s\", bucket_name=\"%s\", file_name=\"%s\")\n", path, bucket_name, file_name);
+}
+
 static int UNUSED cloudfs_error(char *error_str)
 {
     int retval = -errno;
@@ -209,9 +265,19 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
   log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", statbuf=0x%08x)\n", fpath, statbuf);
   retstat = log_syscall("cloudfs_getattr", lstat(fpath, statbuf), 0);
   log_stat(statbuf);
+  char on_cloud[2];
+  char on_cloud_size[64];
+  int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
+  if (oncloud_signal > 0) {
+    cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
+    log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
+    statbuf->st_size = atoi(on_cloud_size);
+  }
+  log_stat(statbuf);
   return retstat;
 }
 
+/** Get extended attributes */
 int cloudfs_getxattr(const char *path, const char *name, char *value, size_t size) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_getxattr", fpath, path);
@@ -224,9 +290,13 @@ int cloudfs_getxattr(const char *path, const char *name, char *value, size_t siz
   return retstat;
 }
 
-int cloudfs_setxattr(const char *, const char *, const char *, size_t, int) {
-  log_msg(logfile, "cloudfs_setxattr called!\n");
-  return 0;
+/** Set extended attributes https://man7.org/linux/man-pages/man2/setxattr.2.html*/
+int cloudfs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) {
+  char fpath[PATH_MAX]; 
+  log_msg(logfile, "\ncloudfs_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
+    path, name, value, size, flags);
+  cloudfs_fullpath("cloudfs_setxattr", fpath, path);
+  return log_syscall("cloudfs_setxattr", lsetxattr(fpath, name, value, size, flags), 0);
 }
 
 int cloudfs_mkdir(const char *path, mode_t mode) {
@@ -250,6 +320,28 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
   cloudfs_fullpath("cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
   log_fi(fi);
+  char on_cloud[2];
+  char on_cloud_size[64];
+  int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
+  if (oncloud_signal > 0) {
+    struct stat stat_buf;
+    cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
+    log_msg(logfile, "\ncloudfs_read(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", path, on_cloud, atoi(on_cloud_size));
+    char bucket_name[PATH_MAX];
+    char file_name[PATH_MAX];
+    generate_bucket_name(path, bucket_name, file_name);
+    strcat(bucket_name, file_name);
+    log_msg(logfile, "get object with bucket name %s and file name %s\n", bucket_name, file_name);
+    cloud_list_bucket(bucket_name, cloudfs_list_bucket);
+    lstat(fpath, &stat_buf);
+    log_stat(&stat_buf);
+    log_msg(logfile, "before getting from server\n");
+    outfile = fopen(fpath, "wb");
+    cloud_get_object(bucket_name, bucket_name, get_buffer_save_in_file);
+    fclose(outfile);
+    lstat(fpath, &stat_buf);
+    log_stat(&stat_buf);
+  }
   fd = log_syscall("open", open(fpath, fi->flags), 0);
   if (fd < 0) {
     retstat = log_error("open");
@@ -262,12 +354,22 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
 /*
  * Linux reference: https://man7.org/linux/man-pages//man2/read.2.html
  *                  https://man7.org/linux/man-pages//man2/pread.2.html
+ * Read should return exactly the number of bytes requested except
+ * on EOF or error, otherwise the rest of the data will be
+ * substituted with zeroes.  An exception to this is when the
+ * 'direct_io' mount option is specified, in which case the return
+ * value of the read system call will reflect the return value of
+ * this operation.
  */
 int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
   log_fi(fi);
-  return log_syscall("cloudfs_read", pread(fi->fh, buf, size, offset), 0);
+  int restat = log_syscall("cloudfs_read", pread(fi->fh, buf, size, offset), 0);
+  // log_msg(logfile, "read result in cloudfs_read %s\n", buf);
+  return restat;
 }
 
 /*
@@ -301,11 +403,48 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
  * Linux reference: https://man7.org/linux/man-pages/man2/close.2.html
  */
 int cloudfs_release(const char *path, struct fuse_file_info *fi) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_release(path=\"%s\", fi=0x%08x)\n", path, fi);
   log_fi(fi);
-  return log_syscall("cloudfs_release", close(fi->fh), 0);
+  struct stat statbuf;
+  int getattr_result = cloudfs_getattr(path, &statbuf);
+  log_stat(&statbuf);
+  int file_size = statbuf.st_size;
+  int retstat = log_syscall("cloudfs_release", close(fi->fh), 0);
+  if (file_size > state_.threshold) {
+    char bucket_name[PATH_MAX];
+    char file_name[PATH_MAX];
+    generate_bucket_name(path, bucket_name, file_name);
+    strcat(bucket_name, file_name);
+    log_msg(logfile, "\ncloudfs_release(path=\"%s\") size %d bigger than cloudfs threshold %d\n", path, file_size, state_.threshold);
+    log_msg(logfile, "Create bucket with bucket name %s\n", bucket_name);
+    S3Status s3status = cloud_create_bucket(bucket_name);
+    log_msg(logfile, "S3Status %d\n", s3status);
+    infile = fopen(fpath, "rb");
+    cloud_put_object(bucket_name, bucket_name, statbuf.st_size, put_buffer_in_cloud);
+    fclose(infile);
+    s3status = cloud_list_bucket(bucket_name, cloudfs_list_bucket);
+    log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
+    cloudfs_setxattr(path, "user.on_cloud", "1", strlen("1"), 0);
+    char file_size_char[64];
+    sprintf(file_size_char, "%d", file_size);
+    cloudfs_setxattr(path, "user.on_cloud_size", file_size_char, strlen(file_size_char), 0);
+    log_msg(logfile, "Set cloud size %s\n", file_size_char);
+    log_msg(logfile, "cloud_put_object end\n");
+    int fd = open(fpath, O_RDWR);
+    ftruncate(fd,0);
+    lseek(fd,0,SEEK_SET);
+    close(fd);
+    // ftruncate(fi->fh, 0);
+    // lseek(fi->fh, 0, SEEK_SET);
+    int getattr_result = cloudfs_getattr(path, &statbuf);
+    log_stat(&statbuf);
+  }
+  // if (file_size > state_.threshold) {
+  // }
+  return retstat;
 }
-
 /*
  * Linux reference: https://man7.org/linux/man-pages/man3/opendir.3.html
  */
@@ -438,6 +577,20 @@ int cloudfs_unlink(const char *path) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_unlink", fpath, path);
   log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
+  char on_cloud[2];
+  char on_cloud_size[64];
+  int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
+  if (oncloud_signal > 0) {
+    char bucket_name[PATH_MAX];
+    char file_name[PATH_MAX];
+    generate_bucket_name(path, bucket_name, file_name);
+    strcat(bucket_name, file_name);
+    log_msg(logfile, "Delete bucket with bucket name %s\n", bucket_name);
+    S3Status s3status = cloud_delete_object(bucket_name, bucket_name);
+    log_msg(logfile, "S3Status %d\n", s3status);
+    s3status = cloud_delete_bucket(bucket_name);
+    log_msg(logfile, "S3Status %d\n", s3status);
+  }
   return log_syscall("cloudfs_unlink", unlink(fpath), 0);
 }
 
@@ -448,7 +601,9 @@ int cloudfs_rmdir(const char *path) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_rmdir", fpath, path);
   log_msg(logfile, "\ncloudfs_rmdir(path=\"%s\")\n", fpath);
-  return log_syscall("cloudfs_rmdir", rmdir(fpath), 0);
+  int retstat = log_syscall("cloudfs_rmdir", rmdir(fpath), 0);
+  cloud_list_service(cloudfs_list_service);
+  return retstat;
 }
 
 int cloundfs_truncate(const char *, off_t) {
@@ -512,7 +667,7 @@ int cloudfs_start(struct cloudfs_state *state,
   printf("ssd_path: %s\n", state_.ssd_path);
   printf("fuse_path: %s\n", state_.fuse_path);
   printf("hostname: %s\n", state_.hostname);
-  logfile = fopen("/home/student/Project/Project2/checkpoint1/src/cloudfs.log", "w");
+  logfile = fopen("/tmp/cloudfs.log", "w");
   setvbuf(logfile, NULL, _IOLBF, 0);
   log_msg(logfile, "cloudfs_init()\n");
   int fuse_stat = fuse_main(argc, argv, &cloudfs_operations, NULL);

@@ -195,7 +195,6 @@ S3Status cloud_list_service(list_service_filler_t filler)
 }
 
 
-
 S3Status cloud_create_bucket(const char *bucketName) {
   S3ResponseHandler responseHandler =
   {
