@@ -283,7 +283,7 @@ int cloudfs_getxattr(const char *path, const char *name, char *value, size_t siz
   cloudfs_fullpath("cloudfs_getxattr", fpath, path);
   int retstat;
   log_msg(logfile, "\ncloudfs_getxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d)\n", fpath, name, value, size);
-  retstat = log_syscall("getxattr", getxattr(fpath, name, value, size), 0);
+  retstat = log_syscall("getxattr", lgetxattr(fpath, name, value, size), 0);
   if (retstat >= 0) {
     log_msg(logfile, "    value = \"%s\"\n", value);
   }
@@ -327,11 +327,21 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
   cloudfs_fullpath("cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
   log_fi(fi);
+  fd = log_syscall("open", open(fpath, fi->flags), 0);
+  if (fd < 0) {
+    retstat = log_error("open");
+    return retstat;
+  }
   char on_cloud[2];
   char on_cloud_size[64];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
+  struct stat statbuf;
+  lstat(fpath, &statbuf);
   if (oncloud_signal > 0) {
-    struct stat stat_buf;
+    log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time before=%ld %ld, last modificaton time before=%ld %ld)\n", 
+      fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
+    struct timespec timesaved[2];
+    timesaved[1] = statbuf.st_mtim;
     cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
     log_msg(logfile, "\ncloudfs_open(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", path, on_cloud, atoi(on_cloud_size));
     char bucket_name[PATH_MAX];
@@ -340,18 +350,23 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     strcat(bucket_name, file_name);
     log_msg(logfile, "get object with bucket name %s and file name %s\n", bucket_name, file_name);
     cloud_list_bucket(bucket_name, cloudfs_list_bucket);
-    lstat(fpath, &stat_buf);
-    log_stat(&stat_buf);
+    lstat(fpath, &statbuf);
+    log_stat(&statbuf);
     log_msg(logfile, "before getting from server\n");
     outfile = fopen(fpath, "wb");
     cloud_get_object(bucket_name, bucket_name, get_buffer_save_in_file);
     fclose(outfile);
-    lstat(fpath, &stat_buf);
-    log_stat(&stat_buf);
-  }
-  fd = log_syscall("open", open(fpath, fi->flags), 0);
-  if (fd < 0) {
-    retstat = log_error("open");
+    lstat(fpath, &statbuf);
+    log_stat(&statbuf);
+    log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time after=%ld %ld, last modificaton time after=%ld %ld)\n", 
+      fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
+    timesaved[0] = statbuf.st_atim;
+    int reverttime = utimensat(0, fpath, timesaved, 0);
+    log_msg(logfile, "revert time result %d\n", reverttime);
+    lstat(fpath, &statbuf);
+    log_stat(&statbuf);
+    log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time ultimate=%ld %ld, last modificaton time ultimate=%ld %ld)\n", 
+      fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
   }
   fi->fh = fd;
   log_fi(fi);
@@ -375,7 +390,6 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
 	    path, buf, size, offset, fi);
   log_fi(fi);
   int restat = log_syscall("cloudfs_read", pread(fi->fh, buf, size, offset), 0);
-  // log_msg(logfile, "read result in cloudfs_read %s\n", buf);
   return restat;
 }
 
@@ -417,6 +431,8 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
   struct stat statbuf;
   int getattr_result = cloudfs_getattr(path, &statbuf);
   log_stat(&statbuf);
+  log_msg(logfile, "\ncloudfs_release(path=\"%s\", last access time before release=%ld %ld, last modificaton time before release=%ld %ld)\n", 
+      fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
   int file_size = statbuf.st_size;
   int retstat = log_syscall("cloudfs_release", close(fi->fh), 0);
   char on_cloud[2];
@@ -425,6 +441,9 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
   if (file_size > state_.threshold) {
     char bucket_name[PATH_MAX];
     char file_name[PATH_MAX];
+    struct timespec timesaved[2];
+    timesaved[1] = statbuf.st_atim;
+    timesaved[1] = statbuf.st_mtim;
     generate_bucket_name(path, bucket_name, file_name);
     strcat(bucket_name, file_name);
     log_msg(logfile, "\ncloudfs_release(path=\"%s\") size %d bigger than cloudfs threshold %d\n", path, file_size, state_.threshold);
@@ -448,6 +467,14 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
     close(fd);
     int getattr_result = cloudfs_getattr(path, &statbuf);
     log_stat(&statbuf);
+    log_msg(logfile, "\ncloudfs_release(path=\"%s\", last access time after release=%ld %ld, last modificaton time after release=%ld %ld)\n", 
+      fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
+    int reverttime = utimensat(0, fpath, timesaved, 0);
+    log_msg(logfile, "revert time result %d\n", reverttime);
+    lstat(fpath, &statbuf);
+    log_stat(&statbuf);
+    log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time ultimate=%ld %ld, last modificaton time ultimate=%ld %ld)\n", 
+      fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
   } else if (file_size <= state_.threshold && oncloud_signal > 0) {
     log_msg(logfile, "\ncloudfs_release(path=\"%s\") size %d smaller than cloudfs threshold %d, and exists on cloud\n", path, file_size, state_.threshold);
     char bucket_name[PATH_MAX];
@@ -558,33 +585,62 @@ int cloudfs_access(const char *path, int mode) {
 /*
  * Change the access and modification times of a file with
  * nanosecond resolution
- *
  */
 int cloudfs_utimens(const char *path, const struct timespec tv[2]) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_utimens", fpath, path);
-  log_msg(logfile, "\ncloudfs_utimens(path=\"%s\")\n", fpath);
-  return log_syscall("utimens", utimensat(0, fpath, tv, 0), 0);
+  struct stat stat_buf;
+  cloudfs_getattr(path, &stat_buf);
+  int retstat = log_syscall("utimens", utimensat(0, fpath, tv, 0), 0);
+  cloudfs_getattr(path, &stat_buf);
+  return retstat;
 }
 
-int cloudfs_chmod(const char *, mode_t) {
-  log_msg(logfile, "cloudfs_chmod called!\n");
-  return 0;
+/** Change the permission bits of a file */
+int cloudfs_chmod(const char *path, mode_t mode) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_chmod", fpath, path);
+  log_msg(logfile, "\ncloudfs_chmod(path=\"%s\", mode=0%03o)\n", fpath, mode);
+  return log_syscall("cloudfs_chmod", chmod(fpath, mode), 0);
 }
 
-int cloudfs_link(const char *, const char *) {
-  log_msg(logfile, "cloudfs_link called!\n");
-  return 0;
+/** Create a hard link to a file */
+int cloudfs_link(const char *oldpath, const char *newpath) {
+  char foldpath[PATH_MAX];
+  char fnewpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_link", foldpath, oldpath);
+  cloudfs_fullpath("cloudfs_link", fnewpath, newpath);
+  log_msg(logfile, "\ncloudfs_link(oldpath=\"%s\", newpath=\"%s\")\n", foldpath, fnewpath);
+  return log_syscall("cloudfs_link", link(foldpath, fnewpath), 0);
 }
 
-int cloudfs_symlink(const char *, const char *) {
-  log_msg(logfile, "cloudfs_symlink called!\n");
-  return 0;
+/** Create a symbolic link */
+int cloudfs_symlink(const char *target, const char *link) {
+    char flinkpath[PATH_MAX];
+    log_msg(logfile, "\ncloudfs_symlink(target=\"%s\", link=\"%s\")\n", target, link);
+    cloudfs_fullpath("cloudfs_symlink", flinkpath, link);
+    return log_syscall("symlink", symlink(target, flinkpath), 0);
 }
 
-int cloudfs_readlink(const char *, char *, size_t) {
-  log_msg(logfile, "cloudfs_readlink called!\n");
-  return 0;
+/** Read the target of a symbolic link
+ *
+ * The buffer should be filled with a null terminated string.  The
+ * buffer size argument includes the space for the terminating
+ * null character.  If the linkname is too long to fit in the
+ * buffer, it should be truncated.  The return value should be 0
+ * for success.
+ */
+int cloudfs_readlink(const char *path, char *buf, size_t bufsize) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_readlink", fpath, path);
+  log_msg(logfile, "\ncloudfs_readlink(path=\"%s\", fpath=\"%s\"\n", path, fpath);
+  int retstat = log_syscall("cloudfs_readlink", readlink(fpath, buf, bufsize - 1), 0);
+  if (retstat >= 0) {
+	  buf[retstat] = '\0';
+	  retstat = 0;
+	  log_msg(logfile, "read result from readlink buf=\"%s\"\n", buf);
+  }
+  return retstat;
 }
 
 /*
