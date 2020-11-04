@@ -299,6 +299,13 @@ int cloudfs_setxattr(const char *path, const char *name, const char *value, size
   return log_syscall("cloudfs_setxattr", lsetxattr(fpath, name, value, size, flags), 0);
 }
 
+int cloudfs_removexattr(const char *path, const char *name) {
+  char fpath[PATH_MAX]; 
+  log_msg(logfile, "\ncloudfs_removexattr(path=\"%s\", name=\"%s\")\n", path, name);
+  cloudfs_fullpath("cloudfs_removexattr", fpath, path);
+  return log_syscall("cloudfs_removexattr", lremovexattr(fpath, name), 0);
+}
+
 int cloudfs_mkdir(const char *path, mode_t mode) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_mkdir", fpath, path);
@@ -326,7 +333,7 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
   if (oncloud_signal > 0) {
     struct stat stat_buf;
     cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
-    log_msg(logfile, "\ncloudfs_read(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", path, on_cloud, atoi(on_cloud_size));
+    log_msg(logfile, "\ncloudfs_open(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", path, on_cloud, atoi(on_cloud_size));
     char bucket_name[PATH_MAX];
     char file_name[PATH_MAX];
     generate_bucket_name(path, bucket_name, file_name);
@@ -412,6 +419,9 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
   log_stat(&statbuf);
   int file_size = statbuf.st_size;
   int retstat = log_syscall("cloudfs_release", close(fi->fh), 0);
+  char on_cloud[2];
+  char on_cloud_size[64];
+  int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
   if (file_size > state_.threshold) {
     char bucket_name[PATH_MAX];
     char file_name[PATH_MAX];
@@ -436,13 +446,20 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
     ftruncate(fd,0);
     lseek(fd,0,SEEK_SET);
     close(fd);
-    // ftruncate(fi->fh, 0);
-    // lseek(fi->fh, 0, SEEK_SET);
     int getattr_result = cloudfs_getattr(path, &statbuf);
     log_stat(&statbuf);
+  } else if (file_size <= state_.threshold && oncloud_signal > 0) {
+    log_msg(logfile, "\ncloudfs_release(path=\"%s\") size %d smaller than cloudfs threshold %d, and exists on cloud\n", path, file_size, state_.threshold);
+    char bucket_name[PATH_MAX];
+    char file_name[PATH_MAX];
+    generate_bucket_name(path, bucket_name, file_name);
+    strcat(bucket_name, file_name);
+    log_msg(logfile, "Delete bucket with bucket name %s\n", bucket_name);
+    S3Status s3status = cloud_delete_object(bucket_name, bucket_name);
+    log_msg(logfile, "S3Status %d\n", s3status);
+    s3status = cloud_delete_bucket(bucket_name);
+    log_msg(logfile, "S3Status %d\n", s3status);
   }
-  // if (file_size > state_.threshold) {
-  // }
   return retstat;
 }
 /*
@@ -606,9 +623,14 @@ int cloudfs_rmdir(const char *path) {
   return retstat;
 }
 
-int cloundfs_truncate(const char *, off_t) {
-  log_msg(logfile, "cloundfs_truncate called!\n");
-  return 0;
+int cloundfs_truncate(const char *path, off_t length) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath("cloudfs_rmdir", fpath, path);
+  log_msg(logfile, "\ncloundfs_truncate(path=\"%s\", length=%d)\n", fpath, length);
+  int retstat = log_syscall("cloundfs_truncate", truncate(fpath, length), 0);
+  char file_size_char[64];
+  sprintf(file_size_char, "%d", length);
+  cloudfs_setxattr(path, "user.on_cloud_size", file_size_char, strlen(file_size_char), 0);
 }
 
 int is_directory(const char *path) {
@@ -636,6 +658,7 @@ int cloudfs_start(struct cloudfs_state *state,
   cloudfs_operations.getattr = cloudfs_getattr;
   cloudfs_operations.getxattr = cloudfs_getxattr;
   cloudfs_operations.setxattr = cloudfs_setxattr;
+  cloudfs_operations.removexattr = cloudfs_removexattr;
   cloudfs_operations.mkdir = cloudfs_mkdir;
   cloudfs_operations.mknod =  cloudfs_mknod;
   cloudfs_operations.open = cloudfs_open;
