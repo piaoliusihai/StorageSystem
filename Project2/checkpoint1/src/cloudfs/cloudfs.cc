@@ -328,10 +328,6 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
   log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
   log_fi(fi);
   fd = log_syscall("open", open(fpath, fi->flags), 0);
-  if (fd < 0) {
-    retstat = log_error("open");
-    return retstat;
-  }
   char on_cloud[2];
   char on_cloud_size[64];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
@@ -341,6 +337,7 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time before=%ld %ld, last modificaton time before=%ld %ld)\n", 
       fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
     struct timespec timesaved[2];
+    mode_t old_mode =  statbuf.st_mode;
     timesaved[1] = statbuf.st_mtim;
     cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
     log_msg(logfile, "\ncloudfs_open(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", path, on_cloud, atoi(on_cloud_size));
@@ -352,6 +349,7 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     cloud_list_bucket(bucket_name, cloudfs_list_bucket);
     lstat(fpath, &statbuf);
     log_stat(&statbuf);
+    cloudfs_chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
     log_msg(logfile, "before getting from server\n");
     outfile = fopen(fpath, "wb");
     cloud_get_object(bucket_name, bucket_name, get_buffer_save_in_file);
@@ -367,6 +365,11 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     log_stat(&statbuf);
     log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time ultimate=%ld %ld, last modificaton time ultimate=%ld %ld)\n", 
       fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
+    cloudfs_chmod(path, old_mode);
+  }
+  if (fd < 0) {
+    retstat = log_error("open");
+    return retstat;
   }
   fi->fh = fd;
   log_fi(fi);
@@ -442,6 +445,7 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
     char bucket_name[PATH_MAX];
     char file_name[PATH_MAX];
     struct timespec timesaved[2];
+    mode_t old_mode =  statbuf.st_mode;
     timesaved[1] = statbuf.st_atim;
     timesaved[1] = statbuf.st_mtim;
     generate_bucket_name(path, bucket_name, file_name);
@@ -450,6 +454,7 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
     log_msg(logfile, "Create bucket with bucket name %s\n", bucket_name);
     S3Status s3status = cloud_create_bucket(bucket_name);
     log_msg(logfile, "S3Status %d\n", s3status);
+    cloudfs_chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
     infile = fopen(fpath, "rb");
     cloud_put_object(bucket_name, bucket_name, statbuf.st_size, put_buffer_in_cloud);
     fclose(infile);
@@ -475,6 +480,7 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
     log_stat(&statbuf);
     log_msg(logfile, "\ncloudfs_utimens(path=\"%s\", last access time ultimate=%ld %ld, last modificaton time ultimate=%ld %ld)\n", 
       fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
+    cloudfs_chmod(path, old_mode);
   } else if (file_size <= state_.threshold && oncloud_signal > 0) {
     log_msg(logfile, "\ncloudfs_release(path=\"%s\") size %d smaller than cloudfs threshold %d, and exists on cloud\n", path, file_size, state_.threshold);
     char bucket_name[PATH_MAX];
