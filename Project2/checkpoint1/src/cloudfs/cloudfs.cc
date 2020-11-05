@@ -202,13 +202,13 @@ int cloudfs_list_service(const char *bucketName) {
 
 // Compute path name and bucket name from path and file name
 void generate_bucket_name(const char *path, char bucket_name[PATH_MAX], char file_name[PATH_MAX]) {
-  int last_slash_index = 0;
-  for (int i = 0; i < strlen(path); i++) {
+  unsigned int last_slash_index = 0;
+  for (unsigned int i = 0; i < strlen(path); i++) {
     if (path[i] == '/') {
       last_slash_index = i;
     }
   }
-  int i = 0, j = 0;
+  unsigned int i = 0, j = 0;
   if (path[i] == '/') i++;
   for (; i <= last_slash_index; i++, j++) {
     if (path[i] == '/') {
@@ -254,7 +254,7 @@ void cloudfs_destroy(void *data UNUSED) {
 void cloudfs_fullpath(char *func, char fpath[PATH_MAX], const char *path)
 {
     strcpy(fpath, state_.ssd_path);
-    strncat(fpath, path + 1, PATH_MAX);
+    strncat(fpath, path + 1, strlen(path) - 1);
     log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"", func, state_.ssd_path, path, fpath);
 }
 
@@ -269,9 +269,9 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
 {
   int retstat;
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_getattr", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_getattr", fpath, path);
   log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", statbuf=0x%08x)\n", fpath, statbuf);
-  retstat = log_syscall("cloudfs_getattr", lstat(fpath, statbuf), 0);
+  retstat = log_syscall((char *) "cloudfs_getattr", lstat(fpath, statbuf), 0);
   log_stat(statbuf);
   char on_cloud[2];
   char on_cloud_size[64];
@@ -291,10 +291,10 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
  */
 int cloudfs_getxattr(const char *path, const char *name, char *value, size_t size) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_getxattr", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_getxattr", fpath, path);
   int retstat;
   log_msg(logfile, "\ncloudfs_getxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d)\n", fpath, name, value, size);
-  retstat = log_syscall("getxattr", lgetxattr(fpath, name, value, size), 0);
+  retstat = log_syscall((char *) "getxattr", lgetxattr(fpath, name, value, size), 0);
   if (retstat >= 0) {
     log_msg(logfile, "    value = \"%s\"\n", value);
   }
@@ -309,8 +309,8 @@ int cloudfs_setxattr(const char *path, const char *name, const char *value, size
   char fpath[PATH_MAX]; 
   log_msg(logfile, "\ncloudfs_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
     path, name, value, size, flags);
-  cloudfs_fullpath("cloudfs_setxattr", fpath, path);
-  return log_syscall("cloudfs_setxattr", lsetxattr(fpath, name, value, size, flags), 0);
+  cloudfs_fullpath((char *) "cloudfs_setxattr", fpath, path);
+  return log_syscall((char *) "cloudfs_setxattr", lsetxattr(fpath, name, value, size, flags), 0);
 }
 
 /**
@@ -320,16 +320,16 @@ int cloudfs_setxattr(const char *path, const char *name, const char *value, size
 int cloudfs_removexattr(const char *path, const char *name) {
   char fpath[PATH_MAX]; 
   log_msg(logfile, "\ncloudfs_removexattr(path=\"%s\", name=\"%s\")\n", path, name);
-  cloudfs_fullpath("cloudfs_removexattr", fpath, path);
-  return log_syscall("cloudfs_removexattr", lremovexattr(fpath, name), 0);
+  cloudfs_fullpath((char *) "cloudfs_removexattr", fpath, path);
+  return log_syscall((char *) "cloudfs_removexattr", lremovexattr(fpath, name), 0);
 }
 
 /** Create a directory */
 int cloudfs_mkdir(const char *path, mode_t mode) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_mkdir", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_mkdir", fpath, path);
   log_msg(logfile, "\ncloudfs_mkdir(path=\"%s\", mode=0%3o)\n", fpath, mode);
-  return log_syscall("mkdir", mkdir(fpath, mode), 0);
+  return log_syscall((char *) "mkdir", mkdir(fpath, mode), 0);
 }
 
 /**
@@ -340,9 +340,9 @@ int cloudfs_mkdir(const char *path, mode_t mode) {
  */
 int cloudfs_mknod(const char *path, mode_t mode, dev_t dev) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_mknod", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_mknod", fpath, path);
   log_msg(logfile, "\ncloudfs_mknod(path=\"%s\", mode=0%3o)\n", fpath, mode);
-  return log_syscall("mknod", mknod(fpath, mode, dev), 0);
+  return log_syscall((char *) "mknod", mknod(fpath, mode, dev), 0);
 }
 
 /** 
@@ -362,10 +362,10 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
   char fpath[PATH_MAX];
   int fd;
   int retstat = 0;
-  cloudfs_fullpath("cloudfs_open", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
   log_fi(fi);
-  fd = log_syscall("open", open(fpath, fi->flags), 0);
+  fd = log_syscall((char *) "open", open(fpath, fi->flags), 0);
   char on_cloud[2];
   char on_cloud_size[64];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
@@ -406,7 +406,7 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     cloudfs_chmod(path, old_mode);
   }
   if (fd < 0) {
-    retstat = log_error("open");
+    retstat = log_error((char *) "open");
     return retstat;
   }
   fi->fh = fd;
@@ -426,11 +426,11 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
  */
 int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_open", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
   log_fi(fi);
-  int restat = log_syscall("cloudfs_read", pread(fi->fh, buf, size, offset), 0);
+  int restat = log_syscall((char *) "cloudfs_read", pread(fi->fh, buf, size, offset), 0);
   return restat;
 }
 
@@ -446,7 +446,7 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
   log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
   log_fi(fi);
-  return log_syscall("cloudfs_write", pwrite(fi->fh, buf, size, offset), 0);
+  return log_syscall((char *) "cloudfs_write", pwrite(fi->fh, buf, size, offset), 0);
 }
 
 /*
@@ -466,18 +466,17 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
  */
 int cloudfs_release(const char *path, struct fuse_file_info *fi) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_open", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_release(path=\"%s\", fi=0x%08x)\n", path, fi);
   log_fi(fi);
   struct stat statbuf;
-  int getattr_result = cloudfs_getattr(path, &statbuf);
+  cloudfs_getattr(path, &statbuf);
   log_stat(&statbuf);
   log_msg(logfile, "\ncloudfs_release(path=\"%s\", last access time before release=%ld %ld, last modificaton time before release=%ld %ld)\n", 
       fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
   int file_size = statbuf.st_size;
-  int retstat = log_syscall("cloudfs_release", close(fi->fh), 0);
+  int retstat = log_syscall((char *) "cloudfs_release", close(fi->fh), 0);
   char on_cloud[2];
-  char on_cloud_size[64];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
   if (file_size > state_.threshold) {
     char bucket_name[PATH_MAX];
@@ -508,7 +507,7 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
     ftruncate(fd,0);
     lseek(fd,0,SEEK_SET);
     close(fd);
-    int getattr_result = cloudfs_getattr(path, &statbuf);
+    cloudfs_getattr(path, &statbuf);
     log_stat(&statbuf);
     log_msg(logfile, "\ncloudfs_release(path=\"%s\", last access time after release=%ld %ld, last modificaton time after release=%ld %ld)\n", 
       fpath, ((&statbuf)->st_atim).tv_sec, fpath, ((&statbuf)->st_atim).tv_nsec, ((&statbuf)->st_mtim).tv_sec, ((&statbuf)->st_mtim).tv_nsec);
@@ -540,11 +539,11 @@ int cloudfs_opendir(const char *path, struct fuse_file_info *fi) {
     DIR *dp;
     int retstat = 0;
     char fpath[PATH_MAX];
-    cloudfs_fullpath("cloudfs_opendir", fpath, path);
+    cloudfs_fullpath((char *) "cloudfs_opendir", fpath, path);
     dp = opendir(fpath);
     log_msg(logfile, "\ncloudfs_opendir(path=\"%s\", fi=0x%08x)\n", fpath, fi);
     if (dp == NULL) {
-      retstat = log_error("cloudfs_opendir opendir");
+      retstat = log_error((char *) "cloudfs_opendir opendir");
     }
     fi->fh = (intptr_t) dp;
     log_fi(fi);
@@ -608,14 +607,13 @@ int cloudfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t o
   int retstat = 0;
   DIR *dp;
   struct dirent *de;
-    
   log_msg(logfile, "\ncloudfs_readdir(path=\"%s\", buf=0x%08x, filler=0x%08x, offset=%lld, fi=0x%08x)\n",
     path, buf, filler, offset, fi);
   dp = (DIR *) (uintptr_t) fi->fh;
   de = readdir(dp);
   log_msg(logfile, "    readdir returned 0x%p\n", de);
   if (de == 0) {
-    retstat = log_error("bb_readdir readdir");
+    retstat = log_error((char *) "bb_readdir readdir");
     return retstat;
   }
   do {
@@ -643,8 +641,8 @@ int cloudfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t o
  */
 int cloudfs_access(const char *path, int mode) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_access", fpath, path);
-  return log_syscall("access", access(fpath, mode), 0);
+  cloudfs_fullpath((char *) "cloudfs_access", fpath, path);
+  return log_syscall((char *) "access", access(fpath, mode), 0);
 }
 
 /*
@@ -653,10 +651,10 @@ int cloudfs_access(const char *path, int mode) {
  */
 int cloudfs_utimens(const char *path, const struct timespec tv[2]) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_utimens", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_utimens", fpath, path);
   struct stat stat_buf;
   cloudfs_getattr(path, &stat_buf);
-  int retstat = log_syscall("utimens", utimensat(0, fpath, tv, 0), 0);
+  int retstat = log_syscall((char *) "utimens", utimensat(0, fpath, tv, 0), 0);
   cloudfs_getattr(path, &stat_buf);
   return retstat;
 }
@@ -664,27 +662,27 @@ int cloudfs_utimens(const char *path, const struct timespec tv[2]) {
 /** Change the permission bits of a file */
 int cloudfs_chmod(const char *path, mode_t mode) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_chmod", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_chmod", fpath, path);
   log_msg(logfile, "\ncloudfs_chmod(path=\"%s\", mode=0%03o)\n", fpath, mode);
-  return log_syscall("cloudfs_chmod", chmod(fpath, mode), 0);
+  return log_syscall((char *) "cloudfs_chmod", chmod(fpath, mode), 0);
 }
 
 /** Create a hard link to a file */
 int cloudfs_link(const char *oldpath, const char *newpath) {
   char foldpath[PATH_MAX];
   char fnewpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_link", foldpath, oldpath);
-  cloudfs_fullpath("cloudfs_link", fnewpath, newpath);
+  cloudfs_fullpath((char *) "cloudfs_link", foldpath, oldpath);
+  cloudfs_fullpath((char *) "cloudfs_link", fnewpath, newpath);
   log_msg(logfile, "\ncloudfs_link(oldpath=\"%s\", newpath=\"%s\")\n", foldpath, fnewpath);
-  return log_syscall("cloudfs_link", link(foldpath, fnewpath), 0);
+  return log_syscall((char *) "cloudfs_link", link(foldpath, fnewpath), 0);
 }
 
 /** Create a symbolic link */
 int cloudfs_symlink(const char *target, const char *link) {
     char flinkpath[PATH_MAX];
     log_msg(logfile, "\ncloudfs_symlink(target=\"%s\", link=\"%s\")\n", target, link);
-    cloudfs_fullpath("cloudfs_symlink", flinkpath, link);
-    return log_syscall("symlink", symlink(target, flinkpath), 0);
+    cloudfs_fullpath((char *)"cloudfs_symlink", flinkpath, link);
+    return log_syscall((char *)"symlink", symlink(target, flinkpath), 0);
 }
 
 /** Read the target of a symbolic link
@@ -697,9 +695,9 @@ int cloudfs_symlink(const char *target, const char *link) {
  */
 int cloudfs_readlink(const char *path, char *buf, size_t bufsize) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_readlink", fpath, path);
+  cloudfs_fullpath((char *)"cloudfs_readlink", fpath, path);
   log_msg(logfile, "\ncloudfs_readlink(path=\"%s\", fpath=\"%s\"\n", path, fpath);
-  int retstat = log_syscall("cloudfs_readlink", readlink(fpath, buf, bufsize - 1), 0);
+  int retstat = log_syscall((char *)"cloudfs_readlink", readlink(fpath, buf, bufsize - 1), 0);
   if (retstat >= 0) {
 	  buf[retstat] = '\0';
 	  retstat = 0;
@@ -713,10 +711,9 @@ int cloudfs_readlink(const char *path, char *buf, size_t bufsize) {
  */
 int cloudfs_unlink(const char *path) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_unlink", fpath, path);
+  cloudfs_fullpath((char *)"cloudfs_unlink", fpath, path);
   log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
   char on_cloud[2];
-  char on_cloud_size[64];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
   if (oncloud_signal > 0) {
     char bucket_name[PATH_MAX];
@@ -729,7 +726,7 @@ int cloudfs_unlink(const char *path) {
     s3status = cloud_delete_bucket(bucket_name);
     log_msg(logfile, "S3Status %d\n", s3status);
   }
-  return log_syscall("cloudfs_unlink", unlink(fpath), 0);
+  return log_syscall((char *) "cloudfs_unlink", unlink(fpath), 0);
 }
 
 /*
@@ -737,28 +734,21 @@ int cloudfs_unlink(const char *path) {
  */
 int cloudfs_rmdir(const char *path) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_rmdir", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_rmdir", fpath, path);
   log_msg(logfile, "\ncloudfs_rmdir(path=\"%s\")\n", fpath);
-  int retstat = log_syscall("cloudfs_rmdir", rmdir(fpath), 0);
+  int retstat = log_syscall((char *) "cloudfs_rmdir", rmdir(fpath), 0);
   cloud_list_service(cloudfs_list_service);
   return retstat;
 }
 
 int cloundfs_truncate(const char *path, off_t length) {
   char fpath[PATH_MAX];
-  cloudfs_fullpath("cloudfs_rmdir", fpath, path);
+  cloudfs_fullpath((char *) "cloudfs_rmdir", fpath, path);
   log_msg(logfile, "\ncloundfs_truncate(path=\"%s\", length=%d)\n", fpath, length);
-  int retstat = log_syscall("cloundfs_truncate", truncate(fpath, length), 0);
+  int retstat = log_syscall((char *) "cloundfs_truncate", truncate(fpath, length), 0);
   char file_size_char[64];
-  sprintf(file_size_char, "%d", length);
   cloudfs_setxattr(path, "user.on_cloud_size", file_size_char, strlen(file_size_char), 0);
-}
-
-int is_directory(const char *path) {
-   struct stat statbuf;
-   if (stat(path, &statbuf) != 0)
-       return 0;
-   return S_ISDIR(statbuf.st_mode);
+  return retstat;
 }
 
 int cloudfs_start(struct cloudfs_state *state,
