@@ -35,6 +35,8 @@ static FILE *logfile;
 static FILE *infile;
 static FILE *outfile;
 
+
+// Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
 void log_msg(FILE *logfile, const char *format, ...)
 {
     va_list ap;
@@ -43,6 +45,8 @@ void log_msg(FILE *logfile, const char *format, ...)
     va_end(ap);
 }
 
+// Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
+// Retrurn negative error if some error happens after system call.
 void log_retstat(char *func, int retstat)
 {
     int errsave = errno;
@@ -50,6 +54,8 @@ void log_retstat(char *func, int retstat)
     errno = errsave;
 }
 
+// Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
+// Report errors to logfile and give -errno to caller
 int log_error(char *func)
 {
     int ret = -errno;
@@ -59,6 +65,7 @@ int log_error(char *func)
     return ret;
 }
 
+// Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
 // make a system call, checking (and reporting) return status and
 // possibly logging error
 int log_syscall(char *func, int retstat, int min_ret)
@@ -71,6 +78,9 @@ int log_syscall(char *func, int retstat, int min_ret)
     return retstat;
 }
 
+// Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
+// This dumps the info from a struct stat.  The struct is defined in
+// <bits/stat.h>; this is indirectly included from <fcntl.h>
 void log_stat(struct stat *si)
 {
   printf("    si:\n");
@@ -116,6 +126,7 @@ void log_stat(struct stat *si)
 	
 }
 
+// Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
 // struct fuse_file_info keeps information about files (surprise!).
 // This dumps all the information in a struct fuse_file_info.  The struct
 // definition, and comments, come from /usr/include/fuse/fuse_common.h
@@ -160,29 +171,36 @@ void log_fi (struct fuse_file_info *fi)
 	log_struct(fi, lock_owner, 0x%016llx, );
 }
 
+// Callback function for putting content to cloud
+// from infile.
 int put_buffer_in_cloud(char *buffer, int bufferLength) {
   int retstat = fread(buffer, 1, bufferLength, infile);
   log_msg(logfile, "put_buffer %d, retstat %d\n", bufferLength, retstat);
   return retstat;
 }
 
+// Callback function for getting content of from cloud and
+// put those content in outfile.
 int get_buffer_save_in_file(const char *buffer, int bufferLength) {
   log_msg(logfile, "get_buffer %d\n", bufferLength);
   int retstat = fwrite(buffer, 1, bufferLength, outfile);
   return retstat;
 }
 
+// Callback function for list all keys of bucket
 int cloudfs_list_bucket(const char *key, time_t modified_time, uint64_t size) {
   log_msg(logfile, "cloudfs_list_bucket\n");
   log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
   return 0;
 }
 
+// Callback function for list all buckets in cloud
 int cloudfs_list_service(const char *bucketName) {
   log_msg(logfile, "%s\n", bucketName);
   return 0; 
 }
 
+// Compute path name and bucket name from path and file name
 void generate_bucket_name(const char *path, char bucket_name[PATH_MAX], char file_name[PATH_MAX]) {
   int last_slash_index = 0;
   for (int i = 0; i < strlen(path); i++) {
@@ -213,24 +231,6 @@ void generate_bucket_name(const char *path, char bucket_name[PATH_MAX], char fil
   log_msg(logfile, "\ngenerate_bucket_name(path=\"%s\", bucket_name=\"%s\", file_name=\"%s\")\n", path, bucket_name, file_name);
 }
 
-static int UNUSED cloudfs_error(char *error_str)
-{
-    int retval = -errno;
-
-    // TODO:
-    //
-    // You may want to add your own logging/debugging functions for printing
-    // error messages. For example:
-    //
-    // debug_msg("ERROR happened. %s\n", error_str, strerror(errno));
-    //
-    
-    fprintf(stderr, "CloudFS Error: %s\n", error_str);
-
-    /* FUSE always returns -errno to caller (yes, it is negative errno!) */
-    return retval;
-}
-
 /*
  * Initializes the FUSE file system (cloudfs) by checking if the mount points
  * are valid, and if all is well, it mounts the file system ready for usage.
@@ -250,6 +250,7 @@ void cloudfs_destroy(void *data UNUSED) {
   cloud_destroy();
 }
 
+// Compute absolute path from path and saved result in fpath
 void cloudfs_fullpath(char *func, char fpath[PATH_MAX], const char *path)
 {
     strcpy(fpath, state_.ssd_path);
@@ -257,6 +258,13 @@ void cloudfs_fullpath(char *func, char fpath[PATH_MAX], const char *path)
     log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"", func, state_.ssd_path, path, fpath);
 }
 
+/** 
+ * Get file attributes.
+ * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
+ * ignored.  The 'st_ino' field is ignored except if the 'use_ino'
+ * mount option is given.
+ * Linux reference: https://linux.die.net/man/2/lstat
+ */
 int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
 {
   int retstat;
@@ -277,7 +285,10 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
   return retstat;
 }
 
-/** Get extended attributes */
+/** 
+ * Get extended attributes 
+ * Linux reference: https://linux.die.net/man/2/lgetxattr
+ */
 int cloudfs_getxattr(const char *path, const char *name, char *value, size_t size) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_getxattr", fpath, path);
@@ -290,7 +301,10 @@ int cloudfs_getxattr(const char *path, const char *name, char *value, size_t siz
   return retstat;
 }
 
-/** Set extended attributes https://man7.org/linux/man-pages/man2/setxattr.2.html*/
+/**
+ * Set extended attributes
+ * Linux reference: https://man7.org/linux/man-pages/man2/setxattr.2.html
+ */
 int cloudfs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) {
   char fpath[PATH_MAX]; 
   log_msg(logfile, "\ncloudfs_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
@@ -299,6 +313,10 @@ int cloudfs_setxattr(const char *path, const char *name, const char *value, size
   return log_syscall("cloudfs_setxattr", lsetxattr(fpath, name, value, size, flags), 0);
 }
 
+/**
+ * Remove extended attributes
+ * Linux reference: https://linux.die.net/man/2/removexattr
+ */
 int cloudfs_removexattr(const char *path, const char *name) {
   char fpath[PATH_MAX]; 
   log_msg(logfile, "\ncloudfs_removexattr(path=\"%s\", name=\"%s\")\n", path, name);
@@ -306,6 +324,7 @@ int cloudfs_removexattr(const char *path, const char *name) {
   return log_syscall("cloudfs_removexattr", lremovexattr(fpath, name), 0);
 }
 
+/** Create a directory */
 int cloudfs_mkdir(const char *path, mode_t mode) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_mkdir", fpath, path);
@@ -313,6 +332,12 @@ int cloudfs_mkdir(const char *path, mode_t mode) {
   return log_syscall("mkdir", mkdir(fpath, mode), 0);
 }
 
+/**
+ * Create a file node
+ * If the filesystem doesn't define a create() operation, mknod()
+ * will be called for creation of all non-directory, non-symlink
+ * nodes.
+ */
 int cloudfs_mknod(const char *path, mode_t mode, dev_t dev) {
   char fpath[PATH_MAX];
   cloudfs_fullpath("cloudfs_mknod", fpath, path);
@@ -320,6 +345,19 @@ int cloudfs_mknod(const char *path, mode_t mode, dev_t dev) {
   return log_syscall("mknod", mknod(fpath, mode, dev), 0);
 }
 
+/** 
+ * File open operation
+ * No creation, or truncation flags (O_CREAT, O_EXCL, O_TRUNC)
+ * will be passed to open().  Open should check if the operation
+ * is permitted for the given flags.  Optionally open may also
+ * return an arbitrary filehandle in the fuse_file_info structure,
+ * which will be passed to all file operations.
+ * 
+ * If the file content is on cloud, fetch if from the cloud first.
+ * Keep last modification time and last access time right.
+ * Also do mode switch in this process.
+ * Changed in version 2.2
+ */
 int cloudfs_open(const char *path, struct fuse_file_info *fi) {
   char fpath[PATH_MAX];
   int fd;
@@ -545,6 +583,27 @@ int couldfs_readdir_contains_lost_found_dir(const char *path, char* filename) {
   return 1;
 }
 
+/** 
+ * Read directory
+ * This supersedes the old getdir() interface.  New applications
+ * should use this.
+ *
+ * The filesystem may choose between two modes of operation:
+ *
+ * 1) The readdir implementation ignores the offset parameter, and
+ * passes zero to the filler function's offset.  The filler
+ * function will not return '1' (unless an error happens), so the
+ * whole directory is read in a single readdir operation.  This
+ * works just like the old getdir() method.
+ *
+ * 2) The readdir implementation keeps track of the offsets of the
+ * directory entries.  It uses the offset parameter and always
+ * passes non-zero offset to the filler function.  When the buffer
+ * is full (or an error happens) the filler function will return
+ * '1'.
+ *
+ * Introduced in version 2.3
+ */
 int cloudfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
   int retstat = 0;
   DIR *dp;
