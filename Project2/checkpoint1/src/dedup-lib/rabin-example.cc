@@ -25,8 +25,8 @@ int main(int argc, const char *argv[])
 {
 	int window_size = 48 ;
 	int avg_seg_size = 4096;
-	int min_seg_size = 2048;
-	int max_seg_size = 8192;
+	int min_seg_size = 3072;
+	int max_seg_size = 6144;
 	char fname[PATH_MAX] = {0};
 
 	int c;
