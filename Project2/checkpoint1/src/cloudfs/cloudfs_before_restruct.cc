@@ -62,21 +62,21 @@ void log_msg(FILE *logfile, const char *format, ...)
 }
 
 std::vector<std::string> split(const std::string& str, const std::string& delim) {  
-	std::vector<std::string> res;  
-	if("" == str) return res;   
-	char * strs = new char[str.length() + 1]; 
-	strcpy(strs, str.c_str());   
+  std::vector<std::string> res;  
+  if("" == str) return res;   
+  char * strs = new char[str.length() + 1]; 
+  strcpy(strs, str.c_str());   
  
-	char * d = new char[delim.length() + 1];  
-	strcpy(d, delim.c_str());  
+  char * d = new char[delim.length() + 1];  
+  strcpy(d, delim.c_str());  
  
-	char *p = strtok(strs, d);  
-	while(p) {  
-		std::string s = p;  
-		res.push_back(s);
-		p = strtok(NULL, d);  
-	}  
-	return res;
+  char *p = strtok(strs, d);  
+  while(p) {  
+    std::string s = p;  
+    res.push_back(s);
+    p = strtok(NULL, d);  
+  }  
+  return res;
 }
 
 // Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
@@ -120,44 +120,44 @@ void log_stat(struct stat *si)
   printf("    si:\n");
     
     //  dev_t     st_dev;     /* ID of device containing file */
-	log_struct(si, st_dev, %lld, );
-	
+  log_struct(si, st_dev, %lld, );
+  
     //  ino_t     st_ino;     /* inode number */
-	log_struct(si, st_ino, %lld, );
-	
+  log_struct(si, st_ino, %lld, );
+  
     //  mode_t    st_mode;    /* protection */
-	log_struct(si, st_mode, 0%o, );
-	
+  log_struct(si, st_mode, 0%o, );
+  
     //  nlink_t   st_nlink;   /* number of hard links */
-	log_struct(si, st_nlink, %d, );
-	
+  log_struct(si, st_nlink, %d, );
+  
     //  uid_t     st_uid;     /* user ID of owner */
-	log_struct(si, st_uid, %d, );
-	
+  log_struct(si, st_uid, %d, );
+  
     //  gid_t     st_gid;     /* group ID of owner */
-	log_struct(si, st_gid, %d, );
-	
+  log_struct(si, st_gid, %d, );
+  
     //  dev_t     st_rdev;    /* device ID (if special file) */
-	log_struct(si, st_rdev, %lld,  );
-	
+  log_struct(si, st_rdev, %lld,  );
+  
     //  off_t     st_size;    /* total size, in bytes */
-	log_struct(si, st_size, %lld,  );
-	
+  log_struct(si, st_size, %lld,  );
+  
     //  blksize_t st_blksize; /* blocksize for filesystem I/O */
-	log_struct(si, st_blksize, %ld,  );
-	
+  log_struct(si, st_blksize, %ld,  );
+  
     //  blkcnt_t  st_blocks;  /* number of blocks allocated */
-	log_struct(si, st_blocks, %lld,  );
+  log_struct(si, st_blocks, %lld,  );
 
     //  time_t    st_atime;   /* time of last access */
-	log_struct(si, st_atime, 0x%08lx, );
+  log_struct(si, st_atime, 0x%08lx, );
 
     //  time_t    st_mtime;   /* time of last modification */
-	log_struct(si, st_mtime, 0x%08lx, );
+  log_struct(si, st_mtime, 0x%08lx, );
 
     //  time_t    st_ctime;   /* time of last status change */
-	log_struct(si, st_ctime, 0x%08lx, );
-	
+  log_struct(si, st_ctime, 0x%08lx, );
+  
 }
 
 // Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
@@ -170,39 +170,39 @@ void log_fi (struct fuse_file_info *fi)
     log_msg(logfile, "    fi:\n");
     
     /** Open flags.  Available in open() and release() */
-    //	int flags;
-	log_struct(fi, flags, 0x%08x, );
-	
+    //  int flags;
+  log_struct(fi, flags, 0x%08x, );
+  
     /** Old file handle, don't use */
-    //	unsigned long fh_old;	
-	log_struct(fi, fh_old, 0x%08lx,  );
+    //  unsigned long fh_old; 
+  log_struct(fi, fh_old, 0x%08lx,  );
 
     /** In case of a write operation indicates if this was caused by a
         writepage */
-    //	int writepage;
-	log_struct(fi, writepage, %d, );
+    //  int writepage;
+  log_struct(fi, writepage, %d, );
 
     /** Can be filled in by open, to use direct I/O on this file.
         Introduced in version 2.4 */
-    //	unsigned int keep_cache : 1;
-	log_struct(fi, direct_io, %d, );
+    //  unsigned int keep_cache : 1;
+  log_struct(fi, direct_io, %d, );
 
     /** Can be filled in by open, to indicate, that cached file data
         need not be invalidated.  Introduced in version 2.4 */
-    //	unsigned int flush : 1;
-	log_struct(fi, keep_cache, %d, );
+    //  unsigned int flush : 1;
+  log_struct(fi, keep_cache, %d, );
 
     /** Padding.  Do not use*/
-    //	unsigned int padding : 29;
+    //  unsigned int padding : 29;
 
     /** File handle.  May be filled in by filesystem in open().
         Available in all other file operations */
-    //	uint64_t fh;
-	log_struct(fi, fh, 0x%016llx,  );
-	
+    //  uint64_t fh;
+  log_struct(fi, fh, 0x%016llx,  );
+  
     /** Lock owner id.  Available in locking operations and flush */
     //  uint64_t lock_owner;
-	log_struct(fi, lock_owner, 0x%016llx, );
+  log_struct(fi, lock_owner, 0x%016llx, );
 }
 
 // Callback function for putting content to cloud
@@ -524,7 +524,7 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
   log_msg(logfile, "\ncloudfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-	    path, buf, size, offset, fi);
+      path, buf, size, offset, fi);
   log_fi(fi);
   char on_cloud[2];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
@@ -580,52 +580,166 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
  * mount option is specified (see read operation).
  */
 int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-  log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n", path, buf, size, offset, fi);
+  log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
+      path, buf, size, offset, fi);
   log_fi(fi);
   char on_cloud[2];
-  char fpath[PATH_MAX];
   int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
+  char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
-  if (offset + size <= state_.threshold && oncloud_signal <= 0) {
-    return log_syscall((char *) "cloudfs_write", pwrite(fi->fh, buf, size, offset), 0);
-  } 
+  if (oncloud_signal <= 0) {
+    if (offset + size <= state_.threshold) {
+      return log_syscall((char *) "cloudfs_write", pwrite(fi->fh, buf, size, offset), 0);
+    } else {
+      int retstat = pwrite(fi->fh, buf, size, offset);
+      std::map<int, file_content_index> file_map;
+      if (retstat < 0) {
+        log_msg(logfile, "\n The newly write content fialed\n");
+      }
+      log_msg(logfile, "\n file size exceed thread %d and in ssd, just write new content with bytes %d in file, then upload to the cloud\n", state_.threshold, retstat);
+      int fd;
+      MD5_CTX ctx;
+      unsigned char md5[MD5_DIGEST_LENGTH];   
+      int new_segment = 0;
+      int len, segment_len = 0, b;
+      int bytes;
+      MD5_Init(&ctx);
+      rabin_reset(rp);
 
-  int fd;
-  std::map<int, file_content_index> file_map;
-  MD5_CTX ctx;
-  unsigned char md5[MD5_DIGEST_LENGTH];		
-  int new_segment = 0;
-  int len, segment_len = 0, b;
-  int bytes;
-  MD5_Init(&ctx);
-  rabin_reset(rp);
-  char fileContentBuffer[1024];
-  int initial_offset = 0, upload_start_index = 0;
+      fd = open(fpath, O_RDONLY);
+      struct stat statbuf;
+      cloudfs_getattr(path, &statbuf);
+      log_stat(&statbuf);
+      char fileContentBuffer[1024];
+      int segment_index = 0;
+      int initial_offset = 0;
+      while((bytes = read(fd, fileContentBuffer, sizeof fileContentBuffer)) > 0 ) {
+        char *buftoread = (char *)&fileContentBuffer[0];
+        while ((len = rabin_segment_next(rp, fileContentBuffer, bytes, 
+                          &new_segment)) > 0) {
+          MD5_Update(&ctx, buftoread, len);
+          segment_len += len;
+          if (new_segment) {
+            MD5_Final(md5, &ctx);
+            log_msg(logfile, "\n find segements %d, newSegmentSymble %d, segment_index %d\n", segment_len, new_segment, segment_index);
+            log_msg(logfile, "%u ", segment_len);
+            std::string md5String;
+            char bytePresentation[3];
+            for(b = 0; b < MD5_DIGEST_LENGTH; b++) {
+              log_msg(logfile, "%02x", md5[b]);
+              sprintf(bytePresentation, "%02x", md5[b]);
+              md5String += std::string(bytePresentation);
+            }
+            log_msg(logfile, "\n");
+            log_msg(logfile, "\n md5 value %s, offset %d, size %d\n", md5String.c_str(), initial_offset, segment_len);
+            file_content_index new_index = {
+              segment_index: segment_index,
+              offset: initial_offset,
+              size: segment_len,
+              md5: md5String,
+            };
+            file_map[initial_offset] = new_index;
+            if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
+              log_msg(logfile, "\n segements with md5 %s firstly used\n", md5String.c_str());
+              md5_to_frequency_map[md5String] = 0;
+              S3Status s3status = cloud_create_bucket(md5String.c_str());
+              log_msg(logfile, "S3Status %d\n", s3status);
+              uploadFdCh2 = fd;
+              uploadFdCh2Offset = initial_offset;
+              cloud_put_object(md5String.c_str(), md5String.c_str(), segment_len, put_buffer_in_cloud_for_ch2);
+              s3status = cloud_list_bucket(md5String.c_str(), cloudfs_list_bucket);
+              log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
+            } else {
+              int frequency = md5_to_frequency_map.find(md5String)->second;
+              log_msg(logfile, "\n segements with md5 %s previous frequency %d\n", md5String.c_str(), md5_to_frequency_map.find(md5String)->second);
+            }
+            MD5_Init(&ctx);
+            initial_offset += segment_len;
+            segment_index += 1;
+            segment_len = 0;
+          }
+          buftoread += len;
+          bytes -= len;
+          if (!bytes) {
+            break;
+          }
+        }
+        if (len == -1) {
+          log_msg(logfile, "Failed to process the segment\n");
+        }
+      }
+      if (segment_len != 0) {
+        MD5_Final(md5, &ctx);
+        std::string md5String;
+        char bytePresentation[3];
+        log_msg(logfile, "%u ", segment_len);
+        for(b = 0; b < MD5_DIGEST_LENGTH; b++) {
+          log_msg(logfile, "%02x", md5[b]);
+          sprintf(bytePresentation, "%02x", md5[b]);
+          md5String += std::string(bytePresentation);
+        }
+        log_msg(logfile,"\n");
+        log_msg(logfile, "\n md5 value %s, offset %d, size %d\n", md5String.c_str(), initial_offset, segment_len);
+        file_content_index new_index = {
+          segment_index: segment_index,
+          offset: initial_offset,
+          size: segment_len,
+          md5: md5String,
+        };
+        file_map[initial_offset] = new_index;
+        if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
+          log_msg(logfile, "\n segements with md5 %s firstly used\n", md5String.c_str());
+          md5_to_frequency_map[md5String] = 0;
+          uploadFdCh2 = fd;
+          uploadFdCh2Offset = initial_offset;
+          S3Status s3status = cloud_create_bucket(md5String.c_str());
+          log_msg(logfile, "S3Status %d\n", s3status);
+          cloud_put_object(md5String.c_str(), md5String.c_str(), segment_len, put_buffer_in_cloud_for_ch2);
+          s3status = cloud_list_bucket(md5String.c_str(), cloudfs_list_bucket);
+          log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
+        } else {
+          log_msg(logfile, "\n segements with md5 %s previous frequency %d\n", md5String.c_str(), md5_to_frequency_map.find(md5String)->second);
+        }
+        cloudfs_setxattr(path, "user.on_cloud", "1", strlen("1"), 0);
+        cloudfs_setxattr(path, "user.on_cloud_size", std::to_string(offset + size).c_str(), strlen(std::to_string(offset + size).c_str()), 0);
+        close(fd);
 
-  if (offset + size > state_.threshold && oncloud_signal <= 0) {
-    int retstat = pwrite(fi->fh, buf, size, offset);
-    if (retstat < 0) {
-      log_msg(logfile, "\n The newly write content fialed\n");
+        int fd = open(fpath, O_RDWR);
+        ftruncate(fd,0);
+        lseek(fd,0,SEEK_SET);
+        close(fd);
+
+        log_msg(logfile, "statbuf of fpath after deleting all\n");
+        log_stat(&statbuf);
+        for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
+          int frequency = md5_to_frequency_map[iter->second.md5];
+          md5_to_frequency_map[iter->second.md5] = frequency + 1;
+          log_msg(logfile, "Filemap status after finishing new write segment in first round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
+        }
+        saveInfoInMapToFile(path, file_map);
+      }
+      return size;
     }
-    log_msg(logfile, "\n file size exceed thread %d and in ssd, just write new content with bytes %d in file, then upload to the cloud\n", state_.threshold, retstat);
   } else {
     log_msg(logfile, "\n content on the cloud\n");
-    file_map = generateFileLocationMap(path);
+    std::map<int, file_content_index> file_map = generateFileLocationMap(path);
     std::deque<file_content_index> changed_vector;
     for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
+      // log_msg(logfile, "Filemap status segment key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
       if ((iter->second.offset < offset && iter->second.offset + iter->second.size >= offset) || 
               (iter->second.offset >= offset && iter->second.offset <= offset + size)) {
           changed_vector.push_back(iter->second);
       }
       md5_to_frequency_map[iter->second.md5] -= 1;
     }
+    log_msg(logfile, "\nneed to write offset %d, size %d\n", offset, size);
     for (int i = 0; i < changed_vector.size(); i++) {
-      file_content_index chunk = changed_vector.at(i);
-      file_map.erase(chunk.offset);
-      log_msg(logfile, "related chunks index %d, offset %d, size %d, md5 %s\n", i, chunk.offset, chunk.size, chunk.md5.c_str());
+        file_content_index chunk = changed_vector.at(i);
+        file_map.erase(chunk.offset);
+        log_msg(logfile, "related chunks index %d, offset %d, size %d, md5 %s\n", i, chunk.offset, chunk.size, chunk.md5.c_str());
     }
 
-    fd = open(fpath, O_RDWR);
+    int fd = open(fpath, O_RDWR);
     ftruncate(fd,0);
     lseek(fd,0,SEEK_SET);
     close(fd);
@@ -634,6 +748,7 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     lstat(fpath, &statbuf);
     log_msg(logfile, "statbuf of fpath before gettting from cloud\n");
     log_stat(&statbuf);
+
 
     outfile = fopen(fpath, "wb");
     for (int i = 0; i < changed_vector.size(); i++) {
@@ -649,7 +764,6 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     log_stat(&statbuf);
 
     int real_offset = offset - changed_vector.at(0).offset;
-    upload_start_index = changed_vector.at(0).offset;
     log_msg(logfile, "\noffset %d, changed_vector.at(0).offset %d, real_offset %d\n", offset, changed_vector.at(0).offset, real_offset);
     int retstat = pwrite(fi->fh, buf, size, real_offset);
     if (retstat < 0) {
@@ -662,119 +776,115 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     log_msg(logfile, "statbuf of fpath after writing in new content\n");
     log_stat(&statbuf);
 
-    initial_offset = changed_vector.at(0).offset;
-  }
-
-  fd = open(fpath, O_RDONLY);
-  while((bytes = read(fd, fileContentBuffer, sizeof fileContentBuffer)) > 0 ) {
-    char *buftoread = (char *)&fileContentBuffer[0];
-    while ((len = rabin_segment_next(rp, fileContentBuffer, bytes, 
-                      &new_segment)) > 0) {
-      MD5_Update(&ctx, buftoread, len);
-      segment_len += len;
-      if (new_segment) {
-        MD5_Final(md5, &ctx);
-        std::string md5String;
-        char bytePresentation[3];
-        for(b = 0; b < MD5_DIGEST_LENGTH; b++) {
-          log_msg(logfile, "%02x", md5[b]);
-          sprintf(bytePresentation, "%02x", md5[b]);
-          md5String += std::string(bytePresentation);
+    MD5_CTX ctx;
+    unsigned char md5[MD5_DIGEST_LENGTH];   
+    int new_segment = 0;
+    int len, segment_len = 0, b;
+    int bytes;
+    MD5_Init(&ctx);
+    rabin_reset(rp);
+    
+    fd = open(fpath, O_RDONLY);
+    char fileContentBuffer[1024];
+    int segment_index = 0;
+    int initial_offset = changed_vector.at(0).offset;
+    while((bytes = read(fd, fileContentBuffer, sizeof fileContentBuffer)) > 0 ) {
+      char *buftoread = (char *)&fileContentBuffer[0];
+      while ((len = rabin_segment_next(rp, fileContentBuffer, bytes, 
+                        &new_segment)) > 0) {
+        MD5_Update(&ctx, buftoread, len);
+        segment_len += len;
+        if (new_segment) {
+          MD5_Final(md5, &ctx);
+          log_msg(logfile, "\n find segements %d, newSegmentSymble %d, segment_index %d\n", segment_len, new_segment, segment_index);
+          log_msg(logfile, "%u ", segment_len);
+          std::string md5String;
+          char bytePresentation[3];
+          for(b = 0; b < MD5_DIGEST_LENGTH; b++) {
+            log_msg(logfile, "%02x", md5[b]);
+            sprintf(bytePresentation, "%02x", md5[b]);
+            md5String += std::string(bytePresentation);
+          }
+          log_msg(logfile, "\n");
+          log_msg(logfile, "\n md5 value %s, offset %d, size %d\n", md5String.c_str(), initial_offset, segment_len);
+          file_content_index new_index = {
+            segment_index: -1,
+            offset: initial_offset,
+            size: segment_len,
+            md5: md5String,
+          };
+          file_map[new_index.offset] = new_index;
+          if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
+            log_msg(logfile, "\n segements with md5 %s firstly used in completed md5\n", md5String.c_str());
+            md5_to_frequency_map[md5String] = 0;
+            S3Status s3status = cloud_create_bucket(md5String.c_str());
+            log_msg(logfile, "S3Status %d\n", s3status);
+            uploadFdCh2 = fd;
+            uploadFdCh2Offset = initial_offset - changed_vector.at(0).offset;
+            log_msg(logfile, "start upload to cloud from file offset, actual offset %d\n", uploadFdCh2Offset, initial_offset);
+            cloud_put_object(md5String.c_str(), md5String.c_str(), segment_len, put_buffer_in_cloud_for_ch2);
+            s3status = cloud_list_bucket(md5String.c_str(), cloudfs_list_bucket);
+            log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
+          } else {
+            int frequency = md5_to_frequency_map.find(md5String)->second;
+            log_msg(logfile, "\n segements with md5 %s previoud frequency %d\n", md5String.c_str(), md5_to_frequency_map.find(md5String)->second);
+          }
+          MD5_Init(&ctx);
+          initial_offset += segment_len;
+          segment_index += 1;
+          segment_len = 0;
         }
-        log_msg(logfile, "\n find segements with md5 value %s, initial_offset %d, size %d\n", md5String.c_str(), initial_offset, segment_len);
-        file_content_index new_index = {
+        buftoread += len;
+        bytes -= len;
+        if (!bytes) {
+          break;
+        }
+      }
+      if (len == -1) {
+        log_msg(logfile, "Failed to process the segment\n");
+      }
+    }
+    if (segment_len != 0) {
+      MD5_Final(md5, &ctx);
+      std::string md5String;
+      char bytePresentation[3];
+      log_msg(logfile, "%u ", segment_len);
+      for(b = 0; b < MD5_DIGEST_LENGTH; b++) {
+        log_msg(logfile, "%02x", md5[b]);
+        sprintf(bytePresentation, "%02x", md5[b]);
+        md5String += std::string(bytePresentation);
+      }
+      log_msg(logfile,"\n");
+      log_msg(logfile, "\n md5 value %s, offset %d, size %d\n", md5String.c_str(), initial_offset, segment_len);
+      file_content_index new_index = {
           segment_index: -1,
           offset: initial_offset,
           size: segment_len,
           md5: md5String,
-        };
-        file_map[new_index.offset] = new_index;
-        if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
-          log_msg(logfile, "\n segements with md5 %s firstly used in completed md5\n", md5String.c_str());
-          md5_to_frequency_map[md5String] = 0;
-          S3Status s3status = cloud_create_bucket(md5String.c_str());
-          log_msg(logfile, "S3Status %d\n", s3status);
-          uploadFdCh2 = fd;
-          uploadFdCh2Offset = initial_offset - upload_start_index;
-          log_msg(logfile, "start upload to cloud from file offset %d, actual offset %d\n", uploadFdCh2Offset, initial_offset);
-          cloud_put_object(md5String.c_str(), md5String.c_str(), segment_len, put_buffer_in_cloud_for_ch2);
-          s3status = cloud_list_bucket(md5String.c_str(), cloudfs_list_bucket);
-          log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
-        } else {
-          log_msg(logfile, "\n segements with md5 %s previoud frequency %d\n", md5String.c_str(), md5_to_frequency_map.find(md5String)->second);
-        }
-        MD5_Init(&ctx);
-        initial_offset += segment_len;
-        segment_len = 0;
-      }
-      buftoread += len;
-      bytes -= len;
-      if (!bytes) {
-        break;
+      };
+      file_map[new_index.offset] = new_index;
+      if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
+        log_msg(logfile, "\n segements with md5 %s firstly used in uncompleted md5\n", md5String.c_str());
+        md5_to_frequency_map[md5String] = 0;
+        uploadFdCh2 = fd;
+        uploadFdCh2Offset = initial_offset - changed_vector.at(0).offset;
+        log_msg(logfile, "start upload to cloud from file offset, actual offset %d\n", uploadFdCh2Offset, initial_offset);
+        S3Status s3status = cloud_create_bucket(md5String.c_str());
+        log_msg(logfile, "S3Status %d\n", s3status);
+        cloud_put_object(md5String.c_str(), md5String.c_str(), segment_len, put_buffer_in_cloud_for_ch2);
+        s3status = cloud_list_bucket(md5String.c_str(), cloudfs_list_bucket);
+        log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
+      } else {
+        int frequency = md5_to_frequency_map.find(md5String)->second;
+        log_msg(logfile, "\n segements with md5 %s previous frequency %d\n", md5String.c_str(), md5_to_frequency_map.find(md5String)->second);
       }
     }
-    if (len == -1) {
-      log_msg(logfile, "Failed to process the segment\n");
+    for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
+        int frequency = md5_to_frequency_map[iter->second.md5];
+        md5_to_frequency_map[iter->second.md5] = frequency + 1;
+        log_msg(logfile, "Filemap status after finishing new write segment in after round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
     }
-  }
-  if (segment_len != 0) {
-    MD5_Final(md5, &ctx);
-    std::string md5String;
-    char bytePresentation[3];
-    log_msg(logfile, "%u ", segment_len);
-    for(b = 0; b < MD5_DIGEST_LENGTH; b++) {
-      log_msg(logfile, "%02x", md5[b]);
-      sprintf(bytePresentation, "%02x", md5[b]);
-      md5String += std::string(bytePresentation);
-    }
-    log_msg(logfile, "\n uncompleted segements with md5 value %s, initial_offset %d, size %d\n", md5String.c_str(), initial_offset, segment_len);
-    file_content_index new_index = {
-        segment_index: -1,
-        offset: initial_offset,
-        size: segment_len,
-        md5: md5String,
-    };
-    file_map[new_index.offset] = new_index;
-    if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
-      log_msg(logfile, "\n segements with md5 %s firstly used in uncompleted md5\n", md5String.c_str());
-      md5_to_frequency_map[md5String] = 0;
-      uploadFdCh2 = fd;
-      uploadFdCh2Offset = initial_offset - upload_start_index;
-      log_msg(logfile, "start upload to cloud from file offset %d, actual offset %d\n", uploadFdCh2Offset, initial_offset);
-      S3Status s3status = cloud_create_bucket(md5String.c_str());
-      log_msg(logfile, "S3Status %d\n", s3status);
-      cloud_put_object(md5String.c_str(), md5String.c_str(), segment_len, put_buffer_in_cloud_for_ch2);
-      s3status = cloud_list_bucket(md5String.c_str(), cloudfs_list_bucket);
-      log_msg(logfile, "S3Status of cloud_list_bucket %d\n", s3status);
-    } else {
-      log_msg(logfile, "\n segements with md5 %s previous frequency %d\n", md5String.c_str(), md5_to_frequency_map.find(md5String)->second);
-    }
-  }
-  close(fd);
-  
-  cloudfs_setxattr(path, "user.on_cloud", "1", strlen("1"), 0);
-  for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
-    int frequency = md5_to_frequency_map[iter->second.md5];
-    md5_to_frequency_map[iter->second.md5] = frequency + 1;
-    log_msg(logfile, "Filemap status after finishing new write segment in after round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
-  }
-  for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end();) {
-    if (iter->second == 0) {
-      std::string md5_to_delete = iter->first;
-      log_msg(logfile, "deleting md5 %s\n", md5_to_delete.c_str());
-      S3Status s3status = cloud_delete_object(md5_to_delete.c_str(), md5_to_delete.c_str());
-      log_msg(logfile, "S3Status %d\n", s3status);
-      s3status = cloud_delete_bucket(md5_to_delete.c_str());
-      log_msg(logfile, "S3Status %d\n", s3status);
-      md5_to_frequency_map.erase(iter++);
-    } else {
-      iter++;
-    }
-  }
-  int on_cloud_char_length = cloudfs_getxattr(path, "user.on_cloud_size", on_cloud, 0);
-  if (on_cloud_char_length < 0) {
-    cloudfs_setxattr(path, "user.on_cloud_size", std::to_string(offset + size).c_str(), strlen(std::to_string(offset + size).c_str()), 0);
-  } else {
+    int on_cloud_char_length = cloudfs_getxattr(path, "user.on_cloud_size", on_cloud, 0);
     char original_length[on_cloud_char_length];
     cloudfs_getxattr(path, "user.on_cloud_size", original_length, on_cloud_char_length);
     original_length[on_cloud_char_length] ='\0';
@@ -782,20 +892,32 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     if (atoi(original_length) < offset + size) {
       cloudfs_setxattr(path, "user.on_cloud_size", std::to_string(offset + size).c_str(), strlen(std::to_string(offset + size).c_str()), 0);
     }
+    for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end();) {
+      if (iter->second == 0) {
+        std::string md5_to_delete = iter->first;
+        log_msg(logfile, "deleting md5 %s\n", md5_to_delete.c_str());
+        S3Status s3status = cloud_delete_object(md5_to_delete.c_str(), md5_to_delete.c_str());
+        log_msg(logfile, "S3Status %d\n", s3status);
+        s3status = cloud_delete_bucket(md5_to_delete.c_str());
+        log_msg(logfile, "S3Status %d\n", s3status);
+        md5_to_frequency_map.erase(iter++);
+      } else {
+        iter++;
+      }
+    }
+    close(fd);
+
+    fd = open(fpath, O_RDWR);
+    ftruncate(fd,0);
+    lseek(fd,0,SEEK_SET);
+    close(fd);
+
+    lstat(fpath, &statbuf);
+    log_msg(logfile, "statbuf of fpath after deleting all\n");
+    log_stat(&statbuf);
+    saveInfoInMapToFile(path, file_map);
+    return size;
   }
-
-  fd = open(fpath, O_RDWR);
-  ftruncate(fd,0);
-  lseek(fd,0,SEEK_SET);
-  close(fd);
-
-  struct stat statbuf;
-  lstat(fpath, &statbuf);
-  log_msg(logfile, "statbuf of fpath after deleting all\n");
-  log_stat(&statbuf);
-  
-  saveInfoInMapToFile(path, file_map);
-  return size;    
 }
 
 /*
@@ -1048,9 +1170,9 @@ int cloudfs_readlink(const char *path, char *buf, size_t bufsize) {
   log_msg(logfile, "\ncloudfs_readlink(path=\"%s\", fpath=\"%s\"\n", path, fpath);
   int retstat = log_syscall((char *)"cloudfs_readlink", readlink(fpath, buf, bufsize - 1), 0);
   if (retstat >= 0) {
-	  buf[retstat] = '\0';
-	  retstat = 0;
-	  log_msg(logfile, "read result from readlink buf=\"%s\"\n", buf);
+    buf[retstat] = '\0';
+    retstat = 0;
+    log_msg(logfile, "read result from readlink buf=\"%s\"\n", buf);
   }
   return retstat;
 }
@@ -1163,11 +1285,11 @@ int cloudfs_start(struct cloudfs_state *state,
     printf("Disable Dedup mode\n");   
   }
   rp = rabin_init(state_.rabin_window_size, state_.avg_seg_size, 
-								  state_.min_seg_size, state_.max_seg_size);
+                  state_.min_seg_size, state_.max_seg_size);
   if (!rp) {
-		printf("Failed to init rabinhash algorithm\n");
-		exit(1);
-	}
+    printf("Failed to init rabinhash algorithm\n");
+    exit(1);
+  }
   logfile = fopen("/tmp/cloudfs.log", "w");
   setvbuf(logfile, NULL, _IOLBF, 0);
   log_msg(logfile, "cloudfs_init()\n");
