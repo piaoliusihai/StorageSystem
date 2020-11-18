@@ -369,11 +369,13 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
   log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", statbuf=0x%08x)\n", fpath, statbuf);
   retstat = log_syscall((char *) "cloudfs_getattr", lstat(fpath, statbuf), 0);
   log_stat(statbuf);
-    char on_cloud[2];
-    char on_cloud_size[64];
-    int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
+  char on_cloud[2];
+  int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
   if (oncloud_signal > 0) {
-    cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
+    int on_cloud_char_length = cloudfs_getxattr(path, "user.on_cloud_size", on_cloud, 0);
+    char on_cloud_size[on_cloud_char_length];
+    cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, on_cloud_char_length);
+    on_cloud_size[on_cloud_char_length] ='\0';
     log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
     statbuf->st_size = atoi(on_cloud_size);
   }
@@ -479,7 +481,6 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     log_fi(fi);
     fd = log_syscall((char *) "open", open(fpath, fi->flags), 0);
     char on_cloud[2];
-    char on_cloud_size[64];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
     struct stat statbuf;
     lstat(fpath, &statbuf);
@@ -489,8 +490,11 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
       struct timespec timesaved[2];
       mode_t old_mode =  statbuf.st_mode;
       timesaved[1] = statbuf.st_mtim;
-      cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, 64);
-      log_msg(logfile, "\ncloudfs_open(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", path, on_cloud, atoi(on_cloud_size));
+      int on_cloud_char_length = cloudfs_getxattr(path, "user.on_cloud_size", on_cloud, 0);
+      char on_cloud_size[on_cloud_char_length];
+      cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, on_cloud_char_length);
+      on_cloud_size[on_cloud_char_length] ='\0';
+      log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
       char bucket_name[PATH_MAX];
       char file_name[PATH_MAX];
       generate_bucket_name(path, bucket_name, file_name);
@@ -566,6 +570,7 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
             log_msg(logfile, "related chunks offset %d, size %d, md5 %s\n", iter->second.offset, iter->second.size, iter->second.md5.c_str());
         }
       }
+
       outfile = fopen(fpath, "wb");
       for (int i = 0; i < changed_vector.size(); i++) {
         file_content_index chunk = changed_vector.at(i);
@@ -784,7 +789,7 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
       int frequency = md5_to_frequency_map[iter->second.md5];
       md5_to_frequency_map[iter->second.md5] = frequency + 1;
-      log_msg(logfile, "Filemap status after finishing new write segment in after round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
+      // log_msg(logfile, "Filemap status after finishing new write segment in after round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
     }
     for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end();) {
       if (iter->second == 0) {
