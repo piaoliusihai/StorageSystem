@@ -570,7 +570,6 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
             log_msg(logfile, "related chunks offset %d, size %d, md5 %s\n", iter->second.offset, iter->second.size, iter->second.md5.c_str());
         }
       }
-
       outfile = fopen(fpath, "wb");
       for (int i = 0; i < changed_vector.size(); i++) {
         file_content_index chunk = changed_vector.at(i);
