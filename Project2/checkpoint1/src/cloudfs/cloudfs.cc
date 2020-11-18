@@ -884,7 +884,14 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
         md5_to_frequency_map[iter->second.md5] = frequency + 1;
         log_msg(logfile, "Filemap status after finishing new write segment in after round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
     }
-    cloudfs_setxattr(path, "user.on_cloud_size", std::to_string(offset + size).c_str(), strlen(std::to_string(offset + size).c_str()), 0);
+    int on_cloud_char_length = cloudfs_getxattr(path, "user.on_cloud_size", on_cloud, 0);
+    char original_length[on_cloud_char_length];
+    cloudfs_getxattr(path, "user.on_cloud_size", original_length, on_cloud_char_length);
+    original_length[on_cloud_char_length] ='\0';
+    log_msg(logfile, "original length %s, current length %d\n", original_length, offset + size);
+    if (atoi(original_length) < offset + size) {
+      cloudfs_setxattr(path, "user.on_cloud_size", std::to_string(offset + size).c_str(), strlen(std::to_string(offset + size).c_str()), 0);
+    }
     for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end();) {
       if (iter->second == 0) {
         std::string md5_to_delete = iter->first;
