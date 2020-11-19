@@ -635,11 +635,11 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
       lseek(fd,0,SEEK_SET);
       close(fd);
       
-      if (verbosePrint >= 2) log_msg(logfile, "revert time result %d\n", reverttime);
       saveInfoInMapToFile(path, file_map);
       lstat(fpath, &statbuf);
       timesaved[0] = statbuf.st_atim;
       int reverttime = utimensat(0, fpath, timesaved, 0);
+      if (verbosePrint >= 2) log_msg(logfile, "revert time result %d\n", reverttime);
       cloudfs_chmod(path, old_mode);
       return restat;
     }
@@ -684,6 +684,8 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     rabin_reset(rp);
     char fileContentBuffer[1024];
     int initial_offset = 0, upload_start_index = 0;
+    struct timespec timesaved[2];
+    struct stat statbuf;
 
     if (offset + size > state_.threshold && oncloud_signal <= 0) {
       int retstat = pwrite(fi->fh, buf, size, offset);
@@ -693,6 +695,10 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
       if (verbosePrint >= 2) log_msg(logfile, "\n file size exceed thread %d and in ssd, just write new content with bytes %d in file, then upload to the cloud\n", state_.threshold, retstat);
     } else {
       if (verbosePrint >= 2) log_msg(logfile, "\n content on the cloud\n");
+     
+      lstat(fpath, &statbuf);
+      timesaved[0] = statbuf.st_atim;
+
       file_map = generateFileLocationMap(path);
       std::deque<file_content_index> changed_vector;
       for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
@@ -713,7 +719,6 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
       lseek(fd,0,SEEK_SET);
       close(fd);
 
-      struct stat statbuf;
       if (verbosePrint >= 2) {
         lstat(fpath, &statbuf);
         log_msg(logfile, "statbuf of fpath before gettting from cloud\n");
@@ -879,13 +884,16 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     close(fd);
 
     if (verbosePrint >= 2) {
-      struct stat statbuf;
       lstat(fpath, &statbuf);
       log_msg(logfile, "statbuf of fpath after deleting all\n");
       log_stat(&statbuf);
     }
-
     saveInfoInMapToFile(path, file_map);
+
+    lstat(fpath, &statbuf);
+    timesaved[1] = statbuf.st_mtim;
+    int reverttime = utimensat(0, fpath, timesaved, 0);
+    if (verbosePrint >= 2) log_msg(logfile, "revert time result %d\n", reverttime);
     return size;
   } else {
     return log_syscall((char *) "cloudfs_write", pwrite(fi->fh, buf, size, offset), 0);
@@ -1236,6 +1244,11 @@ int cloudfs_truncate(const char *path, off_t length) {
       int retstat = log_syscall((char *) "cloudfs_truncate", truncate(fpath, length), 0);
       return retstat;
     } else {
+      struct timespec timesaved[2];
+      struct stat statbuf;
+      lstat(fpath, &statbuf);
+      timesaved[0] = statbuf.st_atim;
+
       int fd;
       std::map<int, file_content_index> file_map = generateFileLocationMap(path);
       std::deque<file_content_index> changed_vector;
@@ -1446,6 +1459,11 @@ int cloudfs_truncate(const char *path, off_t length) {
           lseek(fd,0,SEEK_SET);
           close(fd);
           saveInfoInMapToFile(path, file_map);
+
+          lstat(fpath, &statbuf);
+          timesaved[1] = statbuf.st_mtim;
+          int reverttime = utimensat(0, fpath, timesaved, 0);
+          if (verbosePrint >= 2) log_msg(logfile, "revert time result %d\n", reverttime);
           return 0;
         }
       }
