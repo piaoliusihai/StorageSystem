@@ -634,13 +634,13 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
       ftruncate(fd,0);
       lseek(fd,0,SEEK_SET);
       close(fd);
-
+      
+      if (verbosePrint >= 2) log_msg(logfile, "revert time result %d\n", reverttime);
+      saveInfoInMapToFile(path, file_map);
       lstat(fpath, &statbuf);
       timesaved[0] = statbuf.st_atim;
       int reverttime = utimensat(0, fpath, timesaved, 0);
       cloudfs_chmod(path, old_mode);
-      if (verbosePrint >= 2) log_msg(logfile, "revert time result %d\n", reverttime);
-      saveInfoInMapToFile(path, file_map);
       return restat;
     }
   } else {
