@@ -41,6 +41,7 @@ struct file_content_index {
   int offset;
   int size;
   std::string md5;
+  int complete; // if 1, then complete
 };
 
 static struct cloudfs_state state_;
@@ -308,6 +309,7 @@ std::map<int, file_content_index> generateFileLocationMap(const char *path) {
           offset: atoi(allStr.at(1).c_str()),
           size: atoi(allStr.at(2).c_str()),
           md5: allStr.at(3),
+          complete: atoi(allStr.at(4).c_str()),
         };
         file_info_map[index_info.offset] = index_info;
         if (verbosePrint >= 3) log_msg(logfile, "segment index in generateFileLocationMap %d, offset %d, size %d, md5 %s, md5 length %d\n", index_info.segment_index, index_info.offset, index_info.size, index_info.md5.c_str(), strlen(index_info.md5.c_str()));
@@ -327,7 +329,7 @@ void saveInfoInMapToFile(const char *path, std::map<int, file_content_index> fil
     log_msg(logfile, "open file error\n");
   }
   for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
-    std::string line = std::to_string(segment_index) + std::string(" ") + std::to_string(iter->second.offset) + std::string(" ") + std::to_string(iter->second.size) + std::string(" ") + iter->second.md5;
+    std::string line = std::to_string(segment_index) + std::string(" ") + std::to_string(iter->second.offset) + std::string(" ") + std::to_string(iter->second.size) + std::string(" ") + iter->second.md5  + std::string(" ") + std::to_string(iter->second.complete);
     if (verbosePrint >= 3) log_msg(logfile, "Saving file info from map to file index %d, offset %d, size %d, md5 %s\n", segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
     fprintf(fptr,"%s\n", line.c_str());
     segment_index++;
@@ -702,9 +704,13 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
       file_map = generateFileLocationMap(path);
       std::deque<file_content_index> changed_vector;
       for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
+        if (verbosePrint >= 2) log_msg(logfile, "chunks index %d, offset %d, size %d, md5 %s, complete %d\n", 
+          iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str(), iter->second.complete);
         if ((iter->second.offset < offset && iter->second.offset + iter->second.size >= offset) || 
                 (iter->second.offset >= offset && iter->second.offset <= offset + size)) {
-            changed_vector.push_back(iter->second);
+            if (!(iter->second.offset < offset && iter->second.offset + iter->second.size == offset && iter->second.complete == 1)) {
+              changed_vector.push_back(iter->second);
+            }
         }
         md5_to_frequency_map[iter->second.md5] -= 1;
       }
@@ -740,9 +746,14 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
         log_stat(&statbuf);
       }
 
-      int real_offset = offset - changed_vector.at(0).offset;
-      upload_start_index = changed_vector.at(0).offset;
-      if (verbosePrint >= 2) log_msg(logfile, "\noffset %d, changed_vector.at(0).offset %d, real_offset %d\n", offset, changed_vector.at(0).offset, real_offset);
+      int real_offset = 0;
+      if (!changed_vector.empty()) {
+        real_offset = offset - changed_vector.at(0).offset;
+        upload_start_index = changed_vector.at(0).offset;
+      } else {
+        upload_start_index = offset;
+      }
+      if (verbosePrint >= 2) log_msg(logfile, "\noffset %d, upload_start_index %d, real_offset %d\n", offset, upload_start_index, real_offset);
       int retstat = pwrite(fi->fh, buf, size, real_offset);
       if (retstat < 0) {
         log_msg(logfile, "\n The newly write content fialed\n");
@@ -756,7 +767,11 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
         log_stat(&statbuf);
       }
 
-      initial_offset = changed_vector.at(0).offset;
+      if (!changed_vector.empty()) {
+        initial_offset = changed_vector.at(0).offset;
+      } else {
+        initial_offset = offset;
+      }
     }
 
     fd = open(fpath, O_RDONLY);
@@ -781,6 +796,7 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
             offset: initial_offset,
             size: segment_len,
             md5: md5String,
+            complete: 1,
           };
           file_map[new_index.offset] = new_index;
           if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {
@@ -827,6 +843,7 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
           offset: initial_offset,
           size: segment_len,
           md5: md5String,
+          complete: 0,
       };
       file_map[new_index.offset] = new_index;
       if (md5_to_frequency_map.find(md5String) == md5_to_frequency_map.end()) {

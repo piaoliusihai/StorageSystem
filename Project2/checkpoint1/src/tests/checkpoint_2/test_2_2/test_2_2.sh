@@ -123,7 +123,6 @@ nfiles=`wc -l $LF|cut -d" " -f1`
 print_result $nfiles
 
 rm -rf $TEMPDIR
-rm -rf $LOG_DIR
 
 exit 0
 
