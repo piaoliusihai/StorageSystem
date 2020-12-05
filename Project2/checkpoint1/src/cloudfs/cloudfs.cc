@@ -442,7 +442,7 @@ void *cloudfs_init(struct fuse_conn_info *conn UNUSED)
   return NULL;
 }
 
-void upload_whole_file_in_clould(const char *relative_file_path, const char *bucket_name, const char *key_name) {
+void upload_whole_file_in_clould(const char *relative_file_path, const char *bucket_name, const char *key_name, bool deleteFile) {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "upload_whole_file_in_clould", fpath, relative_file_path);
     struct stat statbuf;
@@ -452,10 +452,9 @@ void upload_whole_file_in_clould(const char *relative_file_path, const char *buc
     cloud_put_object(bucket_name, key_name, statbuf.st_size, put_buffer_in_cloud);
     fclose(infile);
     cloud_list_bucket(bucket_name, cloudfs_list_bucket);
-}
-
-void down_whole_file_in_clould() {
-
+    if (deleteFile) {
+      remove(fpath);
+    }
 }
 
 void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_name) {
@@ -473,8 +472,7 @@ void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_n
     fprintf(fptr,"%s\n", line.c_str());
   }
   fclose(fptr);
-  upload_whole_file_in_clould(fileName.c_str(), bucket_name, key_name);
-  remove(fpath);
+  upload_whole_file_in_clould(fileName.c_str(), bucket_name, key_name, true);
 }
 
 void cloudfs_destroy(void *data UNUSED) {
@@ -1753,7 +1751,7 @@ unsigned long cloudfs_snapshort() {
   std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(time.tv_usec);
   create(("/" + snapshot_name).c_str(), state_.ssd_path);
   s3status = cloud_create_bucket("cloudfs_snapshort_bucket");
-  upload_whole_file_in_clould(("/" + snapshot_name).c_str(), "cloudfs_snapshort_bucket", snapshot_name.c_str());
+  upload_whole_file_in_clould(("/" + snapshot_name).c_str(), "cloudfs_snapshort_bucket", snapshot_name.c_str(), true);
   upload_md5_frequecy_map_to_cloud("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str());
   return time.tv_usec;
 }
@@ -1763,6 +1761,9 @@ void cloudfs_restore(unsigned long timestamp) {
   std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
   download_whole_file_from_cloud("cloudfs_snapshort_bucket", snapshot_name.c_str(), ("/" + snapshot_name).c_str());
   extract(("/" + snapshot_name).c_str(), "/");
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "cloudfs_restore", fpath, ("/" + snapshot_name).c_str());
+  remove(fpath);
 }
 
 int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
