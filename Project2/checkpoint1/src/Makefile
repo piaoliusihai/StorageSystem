@@ -72,7 +72,7 @@ CFLAGS += -Wall  -Wshadow -Wextra -Iinclude \
 CCFLAGS += $(CFLAGS)
 CCFLAGS += -std=c++11
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(FUSE_LIBS) -lpthread -lcrypto -lssl -lcurl -ltar
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(FUSE_LIBS) -lpthread -lcrypto -lssl -lcurl -ltar -larchive
 LIBRARY = -ls3 -lcurl -lxml2
 ifdef DEBUG
 	LIBRARY += ./lib/libdedup-dbg.a

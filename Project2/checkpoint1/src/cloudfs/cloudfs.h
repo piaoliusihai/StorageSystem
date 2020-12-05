@@ -25,5 +25,6 @@ int cloudfs_getxattr(const char *path, const char *name, char *value, size_t siz
 int cloudfs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags);
 int cloudfs_chmod(const char *path, mode_t mode);
 int cloudfs_removexattr(const char *path, const char *name);
+int cloudfs_access(const char *path, int mode);
 #endif
 

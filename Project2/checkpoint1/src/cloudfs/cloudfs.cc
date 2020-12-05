@@ -25,13 +25,17 @@
 #include <sys/stat.h>
 #include "unordered_map"
 #include <openssl/md5.h>
+#include <archive.h>
+#include <archive_entry.h>
 #include "libs3.h"
 #include <map>
 #include <iostream>
 #include <deque>
 #include <vector>
+#include "../snapshot/snapshot-api.h"
 
 #define UNUSED __attribute__((unused))
+#define CLOUDFS_IOCTL_NAME "/.snapshot"
 
 #define log_struct(st, field, format, typecast) \
   log_msg(logfile, "    " #field " = " #format "\n", typecast st->field)
@@ -52,7 +56,7 @@ static std::unordered_map<std::string, int> md5_to_frequency_map;
 static rabinpoly_t *rp;
 static int uploadFdCh2;
 static int uploadFdCh2Offset;
-static int verbosePrint = 0;
+static int verbosePrint = 1;
 
 // Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
 void log_msg(FILE *logfile, const char *format, ...)
@@ -68,7 +72,7 @@ void cloudfs_fullpath(char *func, char fpath[PATH_MAX], const char *path)
 {
     strcpy(fpath, state_.ssd_path);
     strncat(fpath, path + 1, strlen(path) - 1);
-    if (verbosePrint >= 2) log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"", func, state_.ssd_path, path, fpath);
+    log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"\n", func, state_.ssd_path, path, fpath);
 }
 
 std::vector<std::string> split(const std::string& str, const std::string& delim) {  
@@ -239,8 +243,8 @@ int get_buffer_save_in_file(const char *buffer, int bufferLength) {
 
 // Callback function for list all keys of bucket
 int cloudfs_list_bucket(const char *key, time_t modified_time, uint64_t size) {
-  if (verbosePrint >= 2) log_msg(logfile, "cloudfs_list_bucket\n");
-  if (verbosePrint >= 2) log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
+  log_msg(logfile, "cloudfs_list_bucket\n");
+  log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
   return 0;
 }
 
@@ -337,64 +341,6 @@ void saveInfoInMapToFile(const char *path, std::map<int, file_content_index> fil
   fclose(fptr);
 }
 
-/*
- * Initializes the FUSE file system (cloudfs) by checking if the mount points
- * are valid, and if all is well, it mounts the file system ready for usage.
- * 
- * FUSE reference: https://github.com/libfuse/libfuse/blob/fuse_2_6_0/include/fuse.h
- *                 https://libfuse.github.io/doxygen/structfuse__operations.html
- * 
- * 
- */
-void *cloudfs_init(struct fuse_conn_info *conn UNUSED)
-{
-  cloud_init(state_.hostname);
-  log_msg(logfile, "\ncloudfs_init called\n");
-  if (state_.no_dedup == NULL) {
-    std::string fileName = ".frequecyMap";
-    char fpath[PATH_MAX];
-    cloudfs_fullpath((char *) "cloudfs_getattr", fpath, fileName.c_str());
-    char buf[1024];  
-    FILE *fp;            
-    int len;         
-    if((fp = fopen(fpath,"r")) == NULL) {
-        log_error((char *) "open file error");
-        return NULL;
-    }
-    while(fgets(buf,1024,fp) != NULL) {
-        len = strlen(buf);
-        buf[len-1] = '\0';
-        std::vector<std::string> allStr = split(buf, " ");
-        md5_to_frequency_map[allStr.at(0)] = atoi(allStr.at(1).c_str());
-        if (verbosePrint >= 2) log_msg(logfile, "md5 %s, md5 length %d\n", allStr.at(0).c_str(), atoi(allStr.at(1).c_str()));
-    }
-    fclose(fp);
-    remove(fpath);
-  }
-  return NULL;
-}
-
-void cloudfs_destroy(void *data UNUSED) {
-  cloud_destroy();
-  log_msg(logfile, "\ncloudfs_destroy called\n");
-  if (state_.no_dedup == NULL) {
-    std::string fileName = ".frequecyMap";
-    char fpath[PATH_MAX];
-    cloudfs_fullpath((char *) ".cloudfs_getxattr", fpath, fileName.c_str());
-    FILE *fptr;
-    fptr = fopen(fpath, "w");
-    if (fptr == NULL) {
-      log_msg(logfile, "open file error\n");
-      exit(0);
-    }
-    for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
-      std::string line = iter->first + std::string(" ") + std::to_string(iter->second);
-      fprintf(fptr,"%s\n", line.c_str());
-    }
-    fclose(fptr);
-  }
-}
-
 /** 
  * Get file attributes.
  * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
@@ -422,6 +368,103 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
   }
   log_stat(statbuf);
   return retstat;
+}
+
+void recover_md5_frequency_map(const char *bucket_name, const char *key_name) {
+  S3Status s3status = cloud_list_bucket(bucket_name, cloudfs_list_bucket);
+  log_msg(logfile, "S3Status of cloud_list_bucket in loudfs_init %d\n", s3status);
+  if (s3status == S3StatusOK) {
+    std::string fileName = ".frequecyMap";
+    char fpath[PATH_MAX];
+    cloudfs_fullpath((char *) "cloudfs_init", fpath, fileName.c_str());
+
+    outfile = fopen(fpath, "wb");
+    cloud_get_object(bucket_name, key_name, get_buffer_save_in_file);
+    fclose(outfile);
+
+    FILE *fp;
+    fp = fopen(fpath,"r");
+    char buf[1024];            
+    int len;     
+    while(fgets(buf,1024,fp) != NULL) {
+        len = strlen(buf);
+        buf[len-1] = '\0';
+        std::vector<std::string> allStr = split(buf, " ");
+        md5_to_frequency_map[allStr.at(0)] = atoi(allStr.at(1).c_str());
+        if (verbosePrint >= 2) log_msg(logfile, "md5 %s, md5 length %d\n", allStr.at(0).c_str(), atoi(allStr.at(1).c_str()));
+    }
+    fclose(fp);
+    remove(fpath);
+  }
+}
+
+/*
+ * Initializes the FUSE file system (cloudfs) by checking if the mount points
+ * are valid, and if all is well, it mounts the file system ready for usage.
+ * 
+ * FUSE reference: https://github.com/libfuse/libfuse/blob/fuse_2_6_0/include/fuse.h
+ *                 https://libfuse.github.io/doxygen/structfuse__operations.html
+ * 
+ * 
+ */
+void *cloudfs_init(struct fuse_conn_info *conn UNUSED)
+{
+  cloud_init(state_.hostname);
+  log_msg(logfile, "\ncloudfs_init called\n");
+  if (state_.no_dedup == NULL) {
+    FILE *fp;
+    std::string ioctlName = CLOUDFS_IOCTL_NAME;
+    char fpath_ioctl[PATH_MAX];
+    cloudfs_fullpath((char *) "cloudfs_init", fpath_ioctl, ioctlName.c_str());
+    log_msg(logfile, "\nCreate iocrl file %s\n", fpath_ioctl);
+    fp = fopen(fpath_ioctl, "w");
+    fclose(fp);
+    cloudfs_chmod(ioctlName.c_str(), S_IRUSR|S_IRGRP|S_IROTH);  
+    recover_md5_frequency_map("system_status", "system_status");
+  }
+  return NULL;
+}
+
+void upload_whole_file_in_clould(const char *relative_file_path, const char *bucket_name, const char *key_name) {
+    char fpath[PATH_MAX];
+    cloudfs_fullpath((char *) "upload_whole_file_in_clould", fpath, relative_file_path);
+    struct stat statbuf;
+    cloudfs_getattr(relative_file_path, &statbuf);
+    log_stat(&statbuf);
+    infile = fopen(fpath, "rb");
+    cloud_put_object(bucket_name, key_name, statbuf.st_size, put_buffer_in_cloud);
+    fclose(infile);
+    cloud_list_bucket(bucket_name, cloudfs_list_bucket);
+}
+
+void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_name) {
+  std::string fileName = ".frequecyMap";
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "upload_md5_frequecy_map_to_cloud", fpath, fileName.c_str());
+  FILE *fptr;
+  fptr = fopen(fpath, "w");
+  if (fptr == NULL) {
+    log_msg(logfile, "open file error\n");
+    exit(0);
+  }
+  for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
+    std::string line = iter->first + std::string(" ") + std::to_string(iter->second);
+    fprintf(fptr,"%s\n", line.c_str());
+  }
+  fclose(fptr);
+  upload_whole_file_in_clould(fileName.c_str(), bucket_name, key_name);
+}
+
+void cloudfs_destroy(void *data UNUSED) {
+  cloud_destroy();
+  log_msg(logfile, "\ncloudfs_destroy called\n");
+  if (state_.no_dedup == NULL) {
+    std::string fileName = ".frequecyMap";
+    char fpath[PATH_MAX];
+    cloudfs_fullpath((char *) "cloudfs_destroy", fpath, fileName.c_str());
+    upload_md5_frequecy_map_to_cloud("system_status", "system_status");
+    remove(fpath);
+  }
 }
 
 /** 
@@ -1494,6 +1537,236 @@ int cloudfs_truncate(const char *path, off_t length) {
   }
 }
 
+void getRelativePath(const char *absolute_path, char *relative_path) {
+  char *prefix_path = state_.ssd_path;
+  int k = 0;
+	for (int i= strlen(prefix_path); i < strlen(absolute_path); i++) {
+		relative_path[k]=absolute_path[i];
+		k++;
+	}
+	relative_path[k]='\0';
+  log_msg(logfile, "\ngetRelativePath(absolute_path=\"%s\", relative_path=\"%s\")\n", absolute_path, relative_path);
+}
+
+void create(const char *filename, const char *folderpath) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "create", fpath, filename);
+  log_msg(logfile, "\narchive_write_open_filename fpath %s\n", fpath);
+	struct archive *a;
+	struct archive_entry *entry;
+	ssize_t len;
+  char buff[16384];
+	int fd;
+	a = archive_write_new();
+	archive_write_set_format_pax(a);
+  int r;
+	r = archive_write_open_filename(a, fpath);
+  if (r != ARCHIVE_OK) {
+      log_msg(logfile, "archive_write_open_filename\n");
+      exit(1);
+    }
+	struct archive *disk = archive_read_disk_new();
+	archive_read_disk_set_standard_lookup(disk);
+	
+  r = archive_read_disk_open(disk, folderpath);
+  if (r != ARCHIVE_OK) {
+    log_msg(logfile, "archive_read_disk_open error %s\n", archive_error_string(disk));
+    exit(1);
+  }
+
+  for (;;) {
+    entry = archive_entry_new();
+    r = archive_read_next_header2(disk, entry);
+    if (r == ARCHIVE_EOF)
+      break;
+    if (r != ARCHIVE_OK) {
+      log_msg(logfile, "archive_read_next_header2 %s\n", archive_error_string(disk));
+      exit(1);
+    }
+    archive_read_disk_descend(disk);
+    const char *full_entry_pathname = archive_entry_pathname(entry);
+    if (strcmp(full_entry_pathname, "/home/student/mnt/ssd") == 0) {
+      log_msg(logfile, "full_entry_pathname is state_.ssd\n");
+      archive_entry_free(entry);
+      continue;
+    } else {
+      char relative_path[1024];
+      getRelativePath(full_entry_pathname, relative_path);
+      if (strcmp(relative_path, "lost+found") == 0 || strcmp(relative_path, ".snapshot") == 0) {
+        log_msg(logfile, "relative_path is lost+found or .snapshot or compressed file name: %s\n", relative_path);
+        archive_entry_free(entry);
+        continue;
+      }
+      const char* assigned_path = relative_path;
+      archive_entry_set_pathname(entry, assigned_path);
+    }
+    struct stat statbuf;
+    lstat(archive_entry_sourcepath(entry), &statbuf);
+    mode_t old_mode =  statbuf.st_mode;
+    log_msg(logfile, "change mode %s\n", archive_entry_sourcepath(entry));
+    chmod(archive_entry_sourcepath(entry), S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+    log_msg(logfile, "archive_entry_pathname(entry) %s\n", archive_entry_pathname(entry));
+    r = archive_write_header(a, entry);
+    if (r < ARCHIVE_OK) {
+      log_msg(logfile, "archive_write_header error %s\n", archive_error_string(a));
+      archive_entry_free(entry);
+      continue;
+    }
+    if (r == ARCHIVE_FATAL)
+      exit(1);
+    if (r > ARCHIVE_FAILED) {
+      log_msg(logfile, "archive_entry_sourcepath(entry) %s\n", archive_entry_sourcepath(entry));
+      fd = open(archive_entry_sourcepath(entry), O_RDONLY);
+      len = read(fd, buff, sizeof(buff));
+      while (len > 0) {
+        archive_write_data(a, buff, len);
+        len = read(fd, buff, sizeof(buff));
+      }
+      close(fd);
+    }
+    log_msg(logfile, "change mode %s\n", archive_entry_sourcepath(entry));
+    chmod(archive_entry_sourcepath(entry), old_mode);
+    archive_entry_set_perm(entry, old_mode);
+    archive_entry_free(entry);
+  }
+  archive_read_close(disk);
+  archive_read_free(disk);
+	archive_write_close(a);
+	archive_write_free(a);
+}
+
+int copy_data(struct archive *ar, struct archive *aw) {
+	int r;
+	const void *buff;
+	size_t size;
+	int64_t offset;
+	for (;;) {
+    log_msg(logfile, "copy_data process\n");
+		r = archive_read_data_block(ar, &buff, &size, &offset);
+		if (r == ARCHIVE_EOF)
+			return (ARCHIVE_OK);
+		if (r != ARCHIVE_OK) {
+			log_msg(logfile, "archive_read_data_block error %s\n", archive_error_string(ar));
+			return (r);
+		}
+		r = archive_write_data_block(aw, buff, size, offset);
+		if (r != ARCHIVE_OK) {
+			log_msg(logfile, "archive_write_data_block %s\n", archive_error_string(ar));
+			return (r);
+		}
+	}
+}
+
+void extract(const char *filename, const char *foldername) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "extract", fpath, filename);
+  char fpath_for_folder[PATH_MAX];
+  cloudfs_fullpath((char *) "extract", fpath_for_folder, foldername);
+	struct archive *a;
+	struct archive *ext;
+	struct archive_entry *entry;
+	int r;
+  int flags = ARCHIVE_EXTRACT_TIME;
+  flags |= ARCHIVE_EXTRACT_OWNER;
+  flags |= ARCHIVE_EXTRACT_PERM;
+	flags |= ARCHIVE_EXTRACT_ACL;
+	flags |= ARCHIVE_EXTRACT_FFLAGS;
+  flags |= ARCHIVE_EXTRACT_XATTR;
+
+	a = archive_read_new();
+	ext = archive_write_disk_new();
+	archive_write_disk_set_options(ext, flags);
+	archive_read_support_format_tar(a);
+	archive_write_disk_set_standard_lookup(ext);
+	if ((r = archive_read_open_filename(a, fpath, 10240))) {
+    log_msg(logfile, "archive_read_open_filename %s\n", archive_error_string(a));
+		exit(r);
+	}
+	for (;;) {
+		int needcr = 0;
+		r = archive_read_next_header(a, &entry);
+		if (r == ARCHIVE_EOF)
+			break;
+		if (r != ARCHIVE_OK) {
+			log_msg(logfile, "archive_read_next_header %s\n", archive_error_string(a));
+			exit(1);
+		}
+    archive_entry_set_pathname(entry, (std::string(fpath_for_folder) + "/" + archive_entry_pathname(entry)).c_str());
+		log_msg(logfile, "extracting %s\n", archive_entry_pathname(entry));
+    r = archive_write_header(ext, entry);
+    log_msg(logfile, "1\n");
+    if (r != ARCHIVE_OK) {
+      log_msg(logfile, "archive_write_header error %s\n", archive_error_string(a));
+      needcr = 1;
+    } else {
+      log_msg(logfile, "2\n");
+      log_msg(logfile, "going into copy_data process\n");
+      r = copy_data(a, ext);
+      if (r != ARCHIVE_OK)
+        log_msg(logfile, "copy_data error\n");
+    }
+	}
+	archive_read_close(a);
+	archive_read_free(a);
+	archive_write_close(ext);
+  archive_write_free(ext);
+}
+
+unsigned long cloudfs_snapshort() {
+  struct timeval time;
+  int result = gettimeofday(&time, NULL);
+  if (result < 0) {
+    log_error((char *) "cloudfs_snapshort");
+  }
+  log_msg(logfile, "\ncloudfs_snapshort called, returned value %lu\n", time.tv_usec);
+  for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
+    md5_to_frequency_map[iter->first] += 1;
+  }
+  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(time.tv_usec);
+  create(("/" + snapshot_name).c_str(), state_.ssd_path);
+  S3Status s3status = cloud_create_bucket("cloudfs_snapshort_bucket");
+  upload_whole_file_in_clould(("/" + snapshot_name).c_str(), "cloudfs_snapshort_bucket", snapshot_name.c_str());
+  exit(0);
+  return time.tv_usec;
+}
+
+void cloudfs_restore(unsigned long timestamp) {
+  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
+  extract(("/" + snapshot_name).c_str(), "/restored_dir");
+  log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
+}
+
+int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
+  switch (cmd)
+  {
+  case CLOUDFS_SNAPSHOT:
+    log_msg(logfile, "\ncloudfs CLOUDFS_SNAPSHOT called\n");
+    *(unsigned long *)data = cloudfs_snapshort();
+    break;
+  case CLOUDFS_RESTORE:
+    log_msg(logfile, "\ncloudfs CLOUDFS_RESTORE called\n");
+    cloudfs_restore(*(unsigned long *) data);
+    break;
+  case CLOUDFS_SNAPSHOT_LIST:
+    log_msg(logfile, "\ncloudfs CLOUDFS_SNAPSHOT_LIST called\n");
+    break;
+  case CLOUDFS_DELETE:
+    log_msg(logfile, "\ncloudfs CLOUDFS_DELETE called\n");
+    break;
+  case CLOUDFS_INSTALL_SNAPSHOT:
+    log_msg(logfile, "\ncloudfs CLOUDFS_INSTALL_SNAPSHOT called\n");
+    break;
+  case CLOUDFS_UNINSTALL_SNAPSHOT:
+    log_msg(logfile, "\ncloudfs CLOUDFS_UNINSTALL_SNAPSHOT called\n");
+    break;
+  default:
+    break;
+  }
+  return 0;
+}
+
+
+
 int cloudfs_start(struct cloudfs_state *state,
                   const char* fuse_runtime_name) {
   // This is where you add the VFS functions for your implementation of CloudFS.
@@ -1530,6 +1803,7 @@ int cloudfs_start(struct cloudfs_state *state,
   cloudfs_operations.unlink = cloudfs_unlink;
   cloudfs_operations.rmdir = cloudfs_rmdir;
   cloudfs_operations.truncate = cloudfs_truncate;
+  cloudfs_operations.ioctl = cloudfs_ioctl;
   int argc = 0;
   char* argv[10];
   argv[argc] = (char *) malloc(strlen(fuse_runtime_name) + 1);
