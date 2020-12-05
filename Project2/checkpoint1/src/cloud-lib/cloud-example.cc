@@ -65,10 +65,6 @@ int test() {
   printf("%d\n", stat_buf.st_size);
   cloud_put_object("test2", "helloworld", stat_buf.st_size, put_buffer);
   fclose(infile);
-  // int fd = open("/home/student/Project/Project2/checkpoint1/src/tests/checkpoint_1/test_1_2/big_test/a/big1", O_RDWR);
-  // ftruncate(fd,0);
-  // lseek(fd,0,SEEK_SET);
-  // close(fd);
   
   cloud_print_error();
 

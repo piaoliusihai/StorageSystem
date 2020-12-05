@@ -57,6 +57,7 @@ static rabinpoly_t *rp;
 static int uploadFdCh2;
 static int uploadFdCh2Offset;
 static int verbosePrint = 1;
+static std::unordered_map<std::string, bool> keys_in_bucket_map;
 
 // Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
 void log_msg(FILE *logfile, const char *format, ...)
@@ -248,6 +249,13 @@ int cloudfs_list_bucket(const char *key, time_t modified_time, uint64_t size) {
   return 0;
 }
 
+int cloudfs_list_bucket_and_save_in_map(const char *key, time_t modified_time, uint64_t size) {
+  log_msg(logfile, "cloudfs_list_bucket_and_save_in_map\n");
+  log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
+  keys_in_bucket_map[std::string(key)] = true;
+  return 0;
+}
+
 // Callback function for list all buckets in cloud
 int cloudfs_list_service(const char *bucketName) {
   if (verbosePrint >= 2) log_msg(logfile, "%s\n", bucketName);
@@ -371,10 +379,11 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
 }
 
 void recover_md5_frequency_map(const char *bucket_name, const char *key_name) {
+  md5_to_frequency_map.clear();
   S3Status s3status = cloud_list_bucket(bucket_name, cloudfs_list_bucket);
   log_msg(logfile, "S3Status of cloud_list_bucket in loudfs_init %d\n", s3status);
   if (s3status == S3StatusOK) {
-    std::string fileName = ".frequecyMap";
+    std::string fileName = "/.frequecyMap";
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_init", fpath, fileName.c_str());
 
@@ -396,6 +405,14 @@ void recover_md5_frequency_map(const char *bucket_name, const char *key_name) {
     fclose(fp);
     remove(fpath);
   }
+}
+
+void download_whole_file_from_cloud(const char *bucket_name, const char *key_name, const char *fileName) {
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "download_whole_file_from_cloud", fpath, fileName);
+  outfile = fopen(fpath, "wb");
+  cloud_get_object(bucket_name, key_name, get_buffer_save_in_file);
+  fclose(outfile);
 }
 
 /*
@@ -437,8 +454,12 @@ void upload_whole_file_in_clould(const char *relative_file_path, const char *buc
     cloud_list_bucket(bucket_name, cloudfs_list_bucket);
 }
 
+void down_whole_file_in_clould() {
+
+}
+
 void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_name) {
-  std::string fileName = ".frequecyMap";
+  std::string fileName = "/.frequecyMap";
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "upload_md5_frequecy_map_to_cloud", fpath, fileName.c_str());
   FILE *fptr;
@@ -453,6 +474,7 @@ void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_n
   }
   fclose(fptr);
   upload_whole_file_in_clould(fileName.c_str(), bucket_name, key_name);
+  remove(fpath);
 }
 
 void cloudfs_destroy(void *data UNUSED) {
@@ -1713,34 +1735,40 @@ void extract(const char *filename, const char *foldername) {
 }
 
 unsigned long cloudfs_snapshort() {
+  log_msg(logfile, "\ncloudfs_snapshort called\n");
+  keys_in_bucket_map.clear();
+  S3Status s3status = cloud_list_bucket("cloudfs_snapshort_bucket", cloudfs_list_bucket_and_save_in_map);
+  if (s3status == 0 && keys_in_bucket_map.size() == CLOUDFS_MAX_NUM_SNAPSHOTS) {
+    log_msg(logfile, "\nexceed CLOUDFS_MAX_NUM_SNAPSHOTS\n");
+    return -EINVAL;
+  }
   struct timeval time;
   int result = gettimeofday(&time, NULL);
   if (result < 0) {
     log_error((char *) "cloudfs_snapshort");
   }
-  log_msg(logfile, "\ncloudfs_snapshort called, returned value %lu\n", time.tv_usec);
   for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
     md5_to_frequency_map[iter->first] += 1;
   }
   std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(time.tv_usec);
   create(("/" + snapshot_name).c_str(), state_.ssd_path);
-  S3Status s3status = cloud_create_bucket("cloudfs_snapshort_bucket");
+  s3status = cloud_create_bucket("cloudfs_snapshort_bucket");
   upload_whole_file_in_clould(("/" + snapshot_name).c_str(), "cloudfs_snapshort_bucket", snapshot_name.c_str());
-  exit(0);
+  upload_md5_frequecy_map_to_cloud("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str());
   return time.tv_usec;
 }
 
 void cloudfs_restore(unsigned long timestamp) {
-  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
-  extract(("/" + snapshot_name).c_str(), "/restored_dir");
   log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
+  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
+  download_whole_file_from_cloud("cloudfs_snapshort_bucket", snapshot_name.c_str(), ("/" + snapshot_name).c_str());
+  extract(("/" + snapshot_name).c_str(), "/");
 }
 
 int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
   switch (cmd)
   {
   case CLOUDFS_SNAPSHOT:
-    log_msg(logfile, "\ncloudfs CLOUDFS_SNAPSHOT called\n");
     *(unsigned long *)data = cloudfs_snapshort();
     break;
   case CLOUDFS_RESTORE:
