@@ -1756,9 +1756,54 @@ unsigned long cloudfs_snapshort() {
   return time.tv_usec;
 }
 
+
+void getfilepath(const char *path, const char *filename,  char *filepath)
+{
+    strcpy(filepath, path);
+    if(filepath[strlen(path) - 1] != '/')
+        strcat(filepath, "/");
+    strcat(filepath, filename);
+	  log_msg(logfile, "getfilepath is = %s\n",filepath);
+}
+
+bool deleteFileInDirectory(const char* path, bool rootDir) {
+    DIR *dir;
+    struct dirent *dirinfo;
+    struct stat statbuf;
+    char filepath[256] = {0};
+    lstat(path, &statbuf);
+    if (S_ISREG(statbuf.st_mode)) {
+        chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+        remove(path);
+        log_msg(logfile, "file to delete is = %s\n", path);
+    } else if (S_ISDIR(statbuf.st_mode)){
+        if (strcmp(path, state_.ssd_path) != 0) {
+          chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+        }
+        if ((dir = opendir(path)) == NULL)
+            return 1;
+        while ((dirinfo = readdir(dir)) != NULL) {
+            if (strcmp(dirinfo->d_name, ".") == 0 || strcmp(dirinfo->d_name, "..") == 0 || strcmp(dirinfo->d_name, ".snapshot") == 0 || strcmp(dirinfo->d_name, "lost+found") == 0) {
+              continue;
+            }
+            getfilepath(path, dirinfo->d_name, filepath);
+            log_msg(logfile, "path to delete in directory is = %s\n", filepath);
+            deleteFileInDirectory(filepath, false);
+            if (!rootDir) {
+              chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+              rmdir(path);
+              log_msg(logfile, "dir to delete is = %s\n", path);
+            }
+        }
+        closedir(dir);
+    }
+    return 0;
+}
+
 void cloudfs_restore(unsigned long timestamp) {
   log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
   std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
+  deleteFileInDirectory(state_.ssd_path, true);
   download_whole_file_from_cloud("cloudfs_snapshort_bucket", snapshot_name.c_str(), ("/" + snapshot_name).c_str());
   extract(("/" + snapshot_name).c_str(), "/");
   char fpath[PATH_MAX];
