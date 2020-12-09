@@ -57,6 +57,9 @@ function execute_part3_tests()
    #print_result $?
    #sleep 1
 
+   echo -ne "Checking for snapshot list     "
+   $SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot l
+
 
    # delete the file
    echo -ne "Checking for file removal         "

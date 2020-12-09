@@ -1736,7 +1736,7 @@ unsigned long cloudfs_snapshort() {
   log_msg(logfile, "\ncloudfs_snapshort called\n");
   keys_in_bucket_map.clear();
   S3Status s3status = cloud_list_bucket("cloudfs_snapshort_bucket", cloudfs_list_bucket_and_save_in_map);
-  if (s3status == 0 && keys_in_bucket_map.size() == CLOUDFS_MAX_NUM_SNAPSHOTS) {
+  if (s3status == 0 && keys_in_bucket_map.size() / 2 == CLOUDFS_MAX_NUM_SNAPSHOTS) {
     log_msg(logfile, "\nexceed CLOUDFS_MAX_NUM_SNAPSHOTS\n");
     return -EINVAL;
   }
@@ -1811,6 +1811,30 @@ void cloudfs_restore(unsigned long timestamp) {
   remove(fpath);
 }
 
+void cloudfs_list_snapshort(unsigned long timestamp_list[CLOUDFS_MAX_NUM_SNAPSHOTS]) {
+  keys_in_bucket_map.clear();
+  S3Status s3status = cloud_list_bucket("cloudfs_snapshort_bucket", cloudfs_list_bucket_and_save_in_map);
+  int index = 0;
+  for (std::unordered_map<std::string, bool>::iterator iter = keys_in_bucket_map.begin(); iter != keys_in_bucket_map.end(); iter++) {
+      std::string full_name = iter->first;
+      std::string timestamp_string = full_name.substr(18, full_name.length());
+      std::string md5_string = "_md5_frequency";
+      std::string::size_type idx = full_name.find(md5_string);
+      if (idx == std::string::npos) {
+        unsigned long timestamp = std::stoul(timestamp_string, nullptr, 0);
+        log_msg(logfile, "cloudfs_list_snapshort timestamp %ul\n", timestamp);
+        *timestamp_list = timestamp;
+        timestamp_list++;
+        index++;
+      }
+  }
+  while(index < CLOUDFS_MAX_NUM_SNAPSHOTS) {
+    *timestamp_list = 0;
+    timestamp_list++;
+    index++;
+  }
+}
+
 int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
   switch (cmd)
   {
@@ -1823,6 +1847,7 @@ int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *f
     break;
   case CLOUDFS_SNAPSHOT_LIST:
     log_msg(logfile, "\ncloudfs CLOUDFS_SNAPSHOT_LIST called\n");
+    cloudfs_list_snapshort((unsigned long *) data);
     break;
   case CLOUDFS_DELETE:
     log_msg(logfile, "\ncloudfs CLOUDFS_DELETE called\n");
