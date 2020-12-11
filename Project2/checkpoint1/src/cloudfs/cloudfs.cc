@@ -1732,13 +1732,13 @@ void extract(const char *filename, const char *foldername) {
   archive_write_free(ext);
 }
 
-unsigned long cloudfs_snapshort() {
+int cloudfs_snapshort(unsigned long *timestamp) {
   log_msg(logfile, "\ncloudfs_snapshort called\n");
   keys_in_bucket_map.clear();
   S3Status s3status = cloud_list_bucket("cloudfs_snapshort_bucket", cloudfs_list_bucket_and_save_in_map);
   if (s3status == 0 && keys_in_bucket_map.size() / 2 == CLOUDFS_MAX_NUM_SNAPSHOTS) {
     log_msg(logfile, "\nexceed CLOUDFS_MAX_NUM_SNAPSHOTS\n");
-    return -EINVAL;
+    return -1;
   }
   struct timeval time;
   int result = gettimeofday(&time, NULL);
@@ -1753,7 +1753,8 @@ unsigned long cloudfs_snapshort() {
   s3status = cloud_create_bucket("cloudfs_snapshort_bucket");
   upload_whole_file_in_clould(("/" + snapshot_name).c_str(), "cloudfs_snapshort_bucket", snapshot_name.c_str(), true);
   upload_md5_frequecy_map_to_cloud("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str());
-  return time.tv_usec;
+  *timestamp = time.tv_usec;
+  return 0;
 }
 
 
@@ -1800,17 +1801,6 @@ bool deleteFileInDirectory(const char* path, bool rootDir) {
     return 0;
 }
 
-void cloudfs_restore(unsigned long timestamp) {
-  log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
-  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
-  deleteFileInDirectory(state_.ssd_path, true);
-  download_whole_file_from_cloud("cloudfs_snapshort_bucket", snapshot_name.c_str(), ("/" + snapshot_name).c_str());
-  extract(("/" + snapshot_name).c_str(), "/");
-  char fpath[PATH_MAX];
-  cloudfs_fullpath((char *) "cloudfs_restore", fpath, ("/" + snapshot_name).c_str());
-  remove(fpath);
-}
-
 void cloudfs_list_snapshort(unsigned long timestamp_list[CLOUDFS_MAX_NUM_SNAPSHOTS]) {
   keys_in_bucket_map.clear();
   S3Status s3status = cloud_list_bucket("cloudfs_snapshort_bucket", cloudfs_list_bucket_and_save_in_map);
@@ -1835,31 +1825,74 @@ void cloudfs_list_snapshort(unsigned long timestamp_list[CLOUDFS_MAX_NUM_SNAPSHO
   }
 }
 
+bool timestamp_exist_in_the_cloud(unsigned long timestamp) {
+  unsigned long timstamp_list[CLOUDFS_MAX_NUM_SNAPSHOTS];
+  cloudfs_list_snapshort(timstamp_list);
+  bool found = false;
+  for (int i = 0; i < CLOUDFS_MAX_NUM_SNAPSHOTS; i++) {
+    if (timstamp_list[i] == timestamp) found = true;
+  }
+  return found;
+}
+
+int cloudfs_restore(unsigned long timestamp) {
+  if (timestamp_exist_in_the_cloud(timestamp) == false) {
+    log_msg(logfile, "\ncloudfs_restore called, can not find timestamp %lu in the cloud\n", timestamp);
+    return -1;
+  }
+  log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
+  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
+  deleteFileInDirectory(state_.ssd_path, true);
+  download_whole_file_from_cloud("cloudfs_snapshort_bucket", snapshot_name.c_str(), ("/" + snapshot_name).c_str());
+  extract(("/" + snapshot_name).c_str(), "/");
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "cloudfs_restore", fpath, ("/" + snapshot_name).c_str());
+  remove(fpath);
+  return 0;
+}
+
+int cloudfs_install_snapshort(unsigned long timestamp) {
+  if (timestamp_exist_in_the_cloud(timestamp) == false) {
+    log_msg(logfile, "\ncloudfs_instal called, can not find timestamp %lu in the cloud\n", timestamp);
+    return -1;
+  }
+  return 0;
+}
+
 int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
+  int ans = 0;
   switch (cmd)
   {
   case CLOUDFS_SNAPSHOT:
-    *(unsigned long *)data = cloudfs_snapshort();
-    break;
+    ans = cloudfs_snapshort((unsigned long *) data);
+    if (ans == -1) {
+      return -EINVAL;
+    }
+    return 0;
   case CLOUDFS_RESTORE:
     log_msg(logfile, "\ncloudfs CLOUDFS_RESTORE called\n");
-    cloudfs_restore(*(unsigned long *) data);
-    break;
+    ans = cloudfs_restore(*(unsigned long *) data);
+     if (ans == -1) {
+      return -EINVAL;
+    } else {
+      return 0;
+    }
   case CLOUDFS_SNAPSHOT_LIST:
     log_msg(logfile, "\ncloudfs CLOUDFS_SNAPSHOT_LIST called\n");
     cloudfs_list_snapshort((unsigned long *) data);
-    break;
+    return 0;
   case CLOUDFS_DELETE:
     log_msg(logfile, "\ncloudfs CLOUDFS_DELETE called\n");
-    break;
+    return 0;
   case CLOUDFS_INSTALL_SNAPSHOT:
     log_msg(logfile, "\ncloudfs CLOUDFS_INSTALL_SNAPSHOT called\n");
-    break;
+    cloudfs_install_snapshort(*(unsigned long *) data);
+    return 0;
   case CLOUDFS_UNINSTALL_SNAPSHOT:
     log_msg(logfile, "\ncloudfs CLOUDFS_UNINSTALL_SNAPSHOT called\n");
-    break;
+    return 0;
   default:
-    break;
+    return 0;
   }
   return 0;
 }
