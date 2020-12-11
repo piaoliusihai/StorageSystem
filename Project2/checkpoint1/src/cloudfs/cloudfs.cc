@@ -375,18 +375,9 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
     log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
     statbuf->st_size = atoi(on_cloud_size);
   }
-  // if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
-  //   log_msg(logfile, "\nfile is the ioctl rootfile\n");
-  //   statbuf->st_mode = S_IFREG | 0644;
-  // }
-  // if (strlen(path) > strlen(CLOUDFS_INSTALL_DIR_NAME) && S_ISDIR(statbuf->st_mode)) {
-  //   std::string sub_path = std::string(path).substr(0, strlen(CLOUDFS_INSTALL_DIR_NAME));
-  //   log_msg(logfile, "\nsub_path %s, isdir %d\n", sub_path.c_str(), S_ISDIR(statbuf->st_mode));
-  //   if (strcmp(sub_path.c_str(), CLOUDFS_INSTALL_DIR_NAME) == 0) {
-  //     log_msg(logfile, "\nfile is in the CLOUDFS_INSTALL_DIR\n");
-  //     statbuf->st_mode = S_IRUSR|S_IRGRP|S_IROTH;
-  //   }
-  // }
+  if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
+    statbuf->st_size = 0;
+  }
   log_stat(statbuf);
   return retstat;
 }
@@ -662,6 +653,9 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
  */
 int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   if (state_.no_dedup == NULL) {
+    if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
+      return -1;
+    }
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
     log_msg(logfile, "\ncloudfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
@@ -744,14 +738,9 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
   log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
   if (state_.no_dedup == NULL) {
-    // if (strlen(path) > strlen(CLOUDFS_INSTALL_DIR_NAME)) {
-    //   std::string sub_path = std::string(path).substr(0, strlen(CLOUDFS_INSTALL_DIR_NAME));
-    //   log_msg(logfile, "\nsub_path %s\n", sub_path.c_str());
-    //   if (strcmp(sub_path.c_str(), CLOUDFS_INSTALL_DIR_NAME) == 0) {
-    //     log_msg(logfile, "\nfile is in the CLOUDFS_INSTALL_DIR\n");
-    //     return -1;
-    //   }
-    // }
+    if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
+      return -1;
+    }
     char on_cloud[2];
     char fpath[PATH_MAX];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
