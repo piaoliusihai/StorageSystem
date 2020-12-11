@@ -36,6 +36,7 @@
 
 #define UNUSED __attribute__((unused))
 #define CLOUDFS_IOCTL_NAME "/.snapshot"
+#define CLOUDFS_INSTALL_DIR_NAME "/snapshot_"
 
 #define log_struct(st, field, format, typecast) \
   log_msg(logfile, "    " #field " = " #format "\n", typecast st->field)
@@ -374,6 +375,18 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
     log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
     statbuf->st_size = atoi(on_cloud_size);
   }
+  // if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
+  //   log_msg(logfile, "\nfile is the ioctl rootfile\n");
+  //   statbuf->st_mode = S_IFREG | 0644;
+  // }
+  // if (strlen(path) > strlen(CLOUDFS_INSTALL_DIR_NAME) && S_ISDIR(statbuf->st_mode)) {
+  //   std::string sub_path = std::string(path).substr(0, strlen(CLOUDFS_INSTALL_DIR_NAME));
+  //   log_msg(logfile, "\nsub_path %s, isdir %d\n", sub_path.c_str(), S_ISDIR(statbuf->st_mode));
+  //   if (strcmp(sub_path.c_str(), CLOUDFS_INSTALL_DIR_NAME) == 0) {
+  //     log_msg(logfile, "\nfile is in the CLOUDFS_INSTALL_DIR\n");
+  //     statbuf->st_mode = S_IRUSR|S_IRGRP|S_IROTH;
+  //   }
+  // }
   log_stat(statbuf);
   return retstat;
 }
@@ -731,6 +744,14 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
   log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
   if (state_.no_dedup == NULL) {
+    // if (strlen(path) > strlen(CLOUDFS_INSTALL_DIR_NAME)) {
+    //   std::string sub_path = std::string(path).substr(0, strlen(CLOUDFS_INSTALL_DIR_NAME));
+    //   log_msg(logfile, "\nsub_path %s\n", sub_path.c_str());
+    //   if (strcmp(sub_path.c_str(), CLOUDFS_INSTALL_DIR_NAME) == 0) {
+    //     log_msg(logfile, "\nfile is in the CLOUDFS_INSTALL_DIR\n");
+    //     return -1;
+    //   }
+    // }
     char on_cloud[2];
     char fpath[PATH_MAX];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
@@ -1757,7 +1778,6 @@ int cloudfs_snapshort(unsigned long *timestamp) {
   return 0;
 }
 
-
 void getfilepath(const char *path, const char *filename,  char *filepath)
 {
     strcpy(filepath, path);
@@ -1799,6 +1819,32 @@ bool deleteFileInDirectory(const char* path, bool rootDir) {
         closedir(dir);
     }
     return 0;
+}
+
+void change_all_to_be_read_only(char* path) {
+    DIR *dir;
+    struct dirent *dirinfo;
+    struct stat statbuf;
+    char filepath[256] = {0};
+    lstat(path, &statbuf);
+    if (S_ISREG(statbuf.st_mode)) {
+        chmod(path, S_IRUSR|S_IRGRP|S_IROTH);
+        log_msg(logfile, "file changed mod is = %s\n", path);
+    } else if (S_ISDIR(statbuf.st_mode)){
+        log_msg(logfile, "path to changed mod in directory is = %s\n", path);
+        chmod(path, S_IRUSR|S_IXUSR|S_IRGRP|S_IROTH);
+        if ((dir = opendir(path)) == NULL)
+            return;
+        while ((dirinfo = readdir(dir)) != NULL) {
+            if (strcmp(dirinfo->d_name, ".") == 0 || strcmp(dirinfo->d_name, "..") == 0) {
+              continue;
+            }
+            getfilepath(path, dirinfo->d_name, filepath);
+            log_msg(logfile, "path to changed mod in directory is = %s\n", filepath);
+            change_all_to_be_read_only(filepath);
+        }
+        closedir(dir);
+    }
 }
 
 void cloudfs_list_snapshort(unsigned long timestamp_list[CLOUDFS_MAX_NUM_SNAPSHOTS]) {
@@ -1856,6 +1902,20 @@ int cloudfs_install_snapshort(unsigned long timestamp) {
     log_msg(logfile, "\ncloudfs_instal called, can not find timestamp %lu in the cloud\n", timestamp);
     return -1;
   }
+  std::string dir_name = "snapshot_" + std::to_string(timestamp);
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "cloudfs_install_snapshort", fpath, ("/" + dir_name).c_str());
+  if (access(fpath, 0) == 0) {
+    log_msg(logfile, "\ncloudfs_instal called, already installed timestamp %lu\n", timestamp);
+    return -1;
+  }
+  mkdir(fpath, S_IRWXU);
+  std::string snapshot_name = "cloudfs_snapshort_" + std::to_string(timestamp);
+  download_whole_file_from_cloud("cloudfs_snapshort_bucket", snapshot_name.c_str(), ("/" + snapshot_name).c_str());
+  extract(("/" + snapshot_name).c_str(), ("/" + dir_name).c_str());
+  change_all_to_be_read_only(fpath);
+  cloudfs_fullpath((char *) "cloudfs_install_snapshort", fpath, ("/" + snapshot_name).c_str());
+  remove(fpath);
   return 0;
 }
 
