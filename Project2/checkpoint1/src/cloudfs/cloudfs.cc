@@ -1946,7 +1946,7 @@ void minus_frequency_in_deleted_map(std::unordered_map<std::string, int> origina
 
 int cloudfs_delete_snapshort(unsigned long timestamp) {
   if (timestamp_exist_in_the_cloud(timestamp) == false) {
-    log_msg(logfile, "\ncloudfs_delete called, can not find timestamp %lu in the cloud\n", timestamp);
+    log_msg(logfile, "\ncloudfs_delete called, can't find timestamp %lu in the cloud\n", timestamp);
     return -1;
   }
   std::string snapshot_name = "snapshot_" + std::to_string(timestamp);
