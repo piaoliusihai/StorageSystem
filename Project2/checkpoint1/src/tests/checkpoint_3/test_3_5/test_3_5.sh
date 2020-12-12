@@ -34,11 +34,12 @@ function execute_part3_tests()
    cp $TEST_DIR/largefile $TESTDIR
    cp $TEST_DIR/largefile $TEMPDIR
    
-   # create a small file
-   cp $TEST_DIR/smallfile $TESTDIR
-   cp $TEST_DIR/smallfile $TEMPDIR
+   # create a big 6 file
+   cp $TEST_DIR/big6 $TESTDIR
+   cp $TEST_DIR/big6 $TEMPDIR
 
    sleep 1
+
 
    echo "Checking for data integrity(largefile)                 "
    TEST_FILE="largefile"
@@ -47,8 +48,8 @@ function execute_part3_tests()
    diff $LOG_DIR/md5sum.out.master $LOG_DIR/md5sum.out
    print_result $?
 
-   echo "Checking for data integrity(smallfile)                 "
-   TEST_FILE="smallfile"
+   echo "Checking for data integrity(big6)                 "
+   TEST_FILE="big6"
    (cd $TESTDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out.master)
    (cd $TEMPDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out)
    diff $LOG_DIR/md5sum.out.master $LOG_DIR/md5sum.out
@@ -56,7 +57,7 @@ function execute_part3_tests()
 
    # create a snapshot
    echo -ne "Checking for snapshot creation                    "
-   snapshot_num=$($SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot s)
+   snapshot_num_1=$($SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot s)
    if [ $? -ne 0 ]; then
       print_result 1 
       exit
@@ -65,10 +66,13 @@ function execute_part3_tests()
    fi
    sleep 1
 
-   SNAPDIR="$TESTDIR/snapshot_$snapshot_num"
-   # install the snapshot
-   echo -ne "Checking for snapshot install                     "
-   $SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot i $snapshot_num
+   echo "Deleting files"
+   rm $TESTDIR/largefile
+   sleep 1
+
+   # create a snapshot
+   echo -ne "Checking for snapshot creation                    "
+   snapshot_num_2=$($SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot s)
    if [ $? -ne 0 ]; then
       print_result 1 
       exit
@@ -76,48 +80,11 @@ function execute_part3_tests()
       print_result 0
    fi
    sleep 1
-   # Checking for successful read
-   
-   # snapshot path creation
-   SNAPDIR="$TESTDIR/snapshot_$snapshot_num"
-   echo -ne "Checking for data integrity (smallfile)              "
-   TEST_FILE="smallfile"
-   (cd $TESTDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out.master)
-   (cd $SNAPDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out)
-   diff $LOG_DIR/md5sum.out.master $LOG_DIR/md5sum.out
-   print_result $?
-   
-   echo -ne "Checking for data integrity (largefile)              "
-   TEST_FILE="largefile"
-   (cd $TESTDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out.master)
-   (cd $SNAPDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out)
-   diff $LOG_DIR/md5sum.out.master $LOG_DIR/md5sum.out
-   print_result $?
 
-   # Checking for write failures to installed snapshots
-   echo -ne "Checking for writes to installed files fail (largefile)    "
-   echo "hello" >> $SNAPDIR/largefile
-   if [ $? -eq 0 ]; then
-      echo "Error: successful write to installed files"
-      print_result 1
-      exit
-   else 
-      print_result 0
-   fi
+   echo -ne "Checking for delete"
+   $SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot d $snapshot_num_1
 
-   echo -ne "Checking for writes to installed files fail (smallfile)    "
-   echo "hello" >> $SNAPDIR/smallfile
-   if [ $? -eq 0 ]; then
-      echo "Error: successful write to installed files"
-      print_result 1
-      exit
-   else 
-      print_result 0
-   fi
-
-   echo -ne "Checking for uninstall"
-   $SCRIPTS_DIR/snapshot $FUSE_MNT/.snapshot u $snapshot_num
-
+   exit 0
 }
 
 #
