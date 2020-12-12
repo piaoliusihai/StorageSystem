@@ -33,6 +33,7 @@
 #include <deque>
 #include <vector>
 #include "../snapshot/snapshot-api.h"
+#include <algorithm> 
 
 #define UNUSED __attribute__((unused))
 #define CLOUDFS_IOCTL_NAME "/.snapshot"
@@ -1930,13 +1931,14 @@ std::vector<unsigned long> snapshort_after_timestamp_in_the_cloud(unsigned long 
       bigger_timestamp_list.push_back(timestamp);
     }
   }
+  sort(bigger_timestamp_list.begin(), bigger_timestamp_list.end());
   return bigger_timestamp_list;
 }
 
-void minus_frequency_in_deleted_map(std::unordered_map<std::string, int> original_map, std::unordered_map<std::string, int> deleted_snapshot_map) {
+void minus_frequency_in_deleted_map(std::unordered_map<std::string, int> original_map, std::unordered_map<std::string, int> deleted_snapshot_map, int diff) {
   for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
     if (original_map.find(iter->first) != original_map.end()) {
-      original_map[iter->first] = original_map[iter->first] -= 1;
+      original_map[iter->first] = original_map[iter->first] - diff;
       if (original_map[iter->first] == 0) {
         original_map.erase(iter->first);
       }
@@ -1964,13 +1966,13 @@ int cloudfs_delete_snapshort(unsigned long timestamp) {
     log_msg(logfile, "\ncloudfs_delete_snapshort, exists snapshot  %d after this one, need to update md5_frequency\n", bigger_timestamp_list.at(i));
     std::string snapshot_to_update_name = "snapshot_" + std::to_string(bigger_timestamp_list.at(i));
     recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_to_update_name  + "_md5_frequency").c_str(), snapshot_to_update_map);
-    minus_frequency_in_deleted_map(snapshot_to_update_map, deleted_snapshot_map);
+    minus_frequency_in_deleted_map(snapshot_to_update_map, deleted_snapshot_map, 1);
     cloud_delete_object("cloudfs_snapshort_bucket", (snapshot_to_update_name  + "_md5_frequency").c_str());
     upload_md5_frequecy_map_to_cloud("cloudfs_snapshort_bucket", (snapshot_to_update_name + "_md5_frequency").c_str(), snapshot_to_update_map);
   }
   for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
     if (md5_to_frequency_map.find(iter->first) != md5_to_frequency_map.end()) {
-      md5_to_frequency_map[iter->first] = md5_to_frequency_map[iter->first] -= 1;
+      md5_to_frequency_map[iter->first] = md5_to_frequency_map[iter->first] - 1; // need to consider carefully
       if (md5_to_frequency_map[iter->first] == 0) {
         cloud_delete_object(iter->first.c_str(), iter->first.c_str());
         md5_to_frequency_map.erase(iter->first);
