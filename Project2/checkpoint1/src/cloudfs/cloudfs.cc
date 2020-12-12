@@ -1783,12 +1783,12 @@ bool deleteFileInDirectory(const char* path, bool rootDir) {
     char filepath[256] = {0};
     lstat(path, &statbuf);
     if (S_ISREG(statbuf.st_mode)) {
-        chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+        chmod(path, S_IRWXU|S_IRWXG|S_IRWXO);
         remove(path);
         log_msg(logfile, "file to delete is = %s\n", path);
     } else if (S_ISDIR(statbuf.st_mode)){
         if (strcmp(path, state_.ssd_path) != 0) {
-          chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+          chmod(path, S_IRWXU|S_IRWXG|S_IRWXO);
         }
         if ((dir = opendir(path)) == NULL)
             return 1;
@@ -1800,7 +1800,7 @@ bool deleteFileInDirectory(const char* path, bool rootDir) {
             log_msg(logfile, "path to delete in directory is = %s\n", filepath);
             deleteFileInDirectory(filepath, false);
             if (!rootDir) {
-              chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+              chmod(path, S_IRWXU|S_IRWXG|S_IRWXO);
               rmdir(path);
               log_msg(logfile, "dir to delete is = %s\n", path);
             }
@@ -1908,6 +1908,18 @@ int cloudfs_install_snapshort(unsigned long timestamp) {
   return 0;
 }
 
+int cloudfs_uninstall_snapshort(unsigned long timestamp) {
+  std::string dir_name = "snapshot_" + std::to_string(timestamp);
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "cloudfs_uninstall_snapshort", fpath, ("/" + dir_name).c_str());
+  if (access(fpath, 0) != 0) {
+    log_msg(logfile, "\ncloudfs_uninstall_snapshort, not installed timestamp %lu before\n", timestamp);
+    return -1;
+  }
+  deleteFileInDirectory(fpath, false);
+  return 0;
+}
+
 int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
   int ans = 0;
   switch (cmd)
@@ -1921,7 +1933,7 @@ int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *f
   case CLOUDFS_RESTORE:
     log_msg(logfile, "\ncloudfs CLOUDFS_RESTORE called\n");
     ans = cloudfs_restore(*(unsigned long *) data);
-     if (ans == -1) {
+    if (ans == -1) {
       return -EINVAL;
     } else {
       return 0;
@@ -1935,11 +1947,20 @@ int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *f
     return 0;
   case CLOUDFS_INSTALL_SNAPSHOT:
     log_msg(logfile, "\ncloudfs CLOUDFS_INSTALL_SNAPSHOT called\n");
-    cloudfs_install_snapshort(*(unsigned long *) data);
-    return 0;
+    ans = cloudfs_install_snapshort(*(unsigned long *) data);
+    if (ans == -1) {
+      return -EINVAL;
+    } else {
+      return 0;
+    }
   case CLOUDFS_UNINSTALL_SNAPSHOT:
     log_msg(logfile, "\ncloudfs CLOUDFS_UNINSTALL_SNAPSHOT called\n");
-    return 0;
+    ans = cloudfs_uninstall_snapshort(*(unsigned long *) data);
+    if (ans == -1) {
+      return -EINVAL;
+    } else {
+      return 0;
+    }
   default:
     return 0;
   }
