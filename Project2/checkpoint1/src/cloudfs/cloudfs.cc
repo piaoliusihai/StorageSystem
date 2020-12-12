@@ -382,8 +382,8 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
   return retstat;
 }
 
-void recover_md5_frequency_map(const char *bucket_name, const char *key_name) {
-  md5_to_frequency_map.clear();
+void recover_md5_frequency_map(const char *bucket_name, const char *key_name, std::unordered_map<std::string, int> map) {
+  map.clear();
   S3Status s3status = cloud_list_bucket(bucket_name, cloudfs_list_bucket);
   log_msg(logfile, "S3Status of cloud_list_bucket in loudfs_init %d\n", s3status);
   if (s3status == S3StatusOK) {
@@ -403,7 +403,7 @@ void recover_md5_frequency_map(const char *bucket_name, const char *key_name) {
         len = strlen(buf);
         buf[len-1] = '\0';
         std::vector<std::string> allStr = split(buf, " ");
-        md5_to_frequency_map[allStr.at(0)] = atoi(allStr.at(1).c_str());
+        map[allStr.at(0)] = atoi(allStr.at(1).c_str());
         if (verbosePrint >= 2) log_msg(logfile, "md5 %s, md5 length %d\n", allStr.at(0).c_str(), atoi(allStr.at(1).c_str()));
     }
     fclose(fp);
@@ -441,7 +441,7 @@ void *cloudfs_init(struct fuse_conn_info *conn UNUSED)
     fp = fopen(fpath_ioctl, "w");
     fclose(fp);
     cloudfs_chmod(ioctlName.c_str(), S_IRUSR|S_IRGRP|S_IROTH);  
-    recover_md5_frequency_map("system_status", "system_status");
+    recover_md5_frequency_map("system_status", "system_status", md5_to_frequency_map);
   }
   return NULL;
 }
@@ -461,7 +461,7 @@ void upload_whole_file_in_clould(const char *relative_file_path, const char *buc
     }
 }
 
-void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_name) {
+void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_name, std::unordered_map<std::string, int> map) {
   std::string fileName = "/.frequecyMap";
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "upload_md5_frequecy_map_to_cloud", fpath, fileName.c_str());
@@ -471,7 +471,7 @@ void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_n
     log_msg(logfile, "open file error\n");
     exit(0);
   }
-  for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
+  for (std::unordered_map<std::string, int>::iterator iter = map.begin(); iter != map.end(); iter++) {
     std::string line = iter->first + std::string(" ") + std::to_string(iter->second);
     fprintf(fptr,"%s\n", line.c_str());
   }
@@ -486,7 +486,7 @@ void cloudfs_destroy(void *data UNUSED) {
     std::string fileName = ".frequecyMap";
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_destroy", fpath, fileName.c_str());
-    upload_md5_frequecy_map_to_cloud("system_status", "system_status");
+    upload_md5_frequecy_map_to_cloud("system_status", "system_status", md5_to_frequency_map);
     remove(fpath);
   }
 }
@@ -1762,7 +1762,7 @@ int cloudfs_snapshort(unsigned long *timestamp) {
   create(("/" + snapshot_name).c_str(), state_.ssd_path);
   s3status = cloud_create_bucket("cloudfs_snapshort_bucket");
   upload_whole_file_in_clould(("/" + snapshot_name).c_str(), "cloudfs_snapshort_bucket", snapshot_name.c_str(), true);
-  upload_md5_frequecy_map_to_cloud("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str());
+  upload_md5_frequecy_map_to_cloud("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str(), md5_to_frequency_map);
   *timestamp = time.tv_usec;
   return 0;
 }
@@ -1883,6 +1883,7 @@ int cloudfs_restore(unsigned long timestamp) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_restore", fpath, ("/" + snapshot_name).c_str());
   remove(fpath);
+  recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str(), md5_to_frequency_map);
   return 0;
 }
 
@@ -1920,6 +1921,22 @@ int cloudfs_uninstall_snapshort(unsigned long timestamp) {
   return 0;
 }
 
+int cloudfs_delete_snapshort(unsigned long timestamp) {
+  if (timestamp_exist_in_the_cloud(timestamp) == false) {
+    log_msg(logfile, "\ncloudfs_delete called, can not find timestamp %lu in the cloud\n", timestamp);
+    return -1;
+  }
+  std::string snapshot_name = "snapshot_" + std::to_string(timestamp);
+  char fpath[PATH_MAX];
+  cloudfs_fullpath((char *) "cloudfs_delete_snapshort", fpath, ("/" + snapshot_name).c_str());
+  if (access(fpath, 0) == 0) {
+    log_msg(logfile, "\ncloudfs_delete_snapshort, has installed %lu before, not allowed to delete\n", timestamp);
+    return -1;
+  }
+  std::unordered_map<std::string, int> deleted_snapshot_map;
+  recover_md5_frequency_map("cloudfs_snapshort_bucket", snapshot_name.c_str(), deleted_snapshot_map);
+}
+
 int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *fi, unsigned int flags, void *data) {
   int ans = 0;
   switch (cmd)
@@ -1944,7 +1961,12 @@ int cloudfs_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *f
     return 0;
   case CLOUDFS_DELETE:
     log_msg(logfile, "\ncloudfs CLOUDFS_DELETE called\n");
-    return 0;
+    ans = cloudfs_delete_snapshort(*(unsigned long *) data);
+    if (ans == -1) {
+      return -EINVAL;
+    } else {
+      return 0;
+    }
   case CLOUDFS_INSTALL_SNAPSHOT:
     log_msg(logfile, "\ncloudfs CLOUDFS_INSTALL_SNAPSHOT called\n");
     ans = cloudfs_install_snapshort(*(unsigned long *) data);
