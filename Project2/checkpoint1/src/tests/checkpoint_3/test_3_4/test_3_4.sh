@@ -86,7 +86,7 @@ function execute_part3_tests()
    (cd $SNAPDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out)
    diff $LOG_DIR/md5sum.out.master $LOG_DIR/md5sum.out
    print_result $?
-   
+
    echo -ne "Checking for data integrity (largefile)              "
    TEST_FILE="largefile"
    (cd $TESTDIR && find $TEST_FILE  \( ! -regex '.*/\..*' \) -type f -exec md5sum \{\} \; | sort -k2 | awk '{print $1}' > $LOG_DIR/md5sum.out.master)
