@@ -58,7 +58,7 @@ static std::unordered_map<std::string, int> md5_to_frequency_map;
 static rabinpoly_t *rp;
 static int uploadFdCh2;
 static int uploadFdCh2Offset;
-static int verbosePrint = 1;
+static int verbosePrint = 0;
 static std::unordered_map<std::string, bool> keys_in_bucket_map;
 
 // Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
@@ -75,7 +75,7 @@ void cloudfs_fullpath(char *func, char fpath[PATH_MAX], const char *path)
 {
     strcpy(fpath, state_.ssd_path);
     strncat(fpath, path + 1, strlen(path) - 1);
-    log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"\n", func, state_.ssd_path, path, fpath);
+    // log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"\n", func, state_.ssd_path, path, fpath);
 }
 
 std::vector<std::string> split(const std::string& str, const std::string& delim) {  
@@ -101,7 +101,7 @@ std::vector<std::string> split(const std::string& str, const std::string& delim)
 void log_retstat(char *func, int retstat)
 {
     int errsave = errno;
-    log_msg(logfile, "    %s returned %d\n", func, retstat);
+    // log_msg(logfile, "    %s returned %d\n", func, retstat);
     errno = errsave;
 }
 
@@ -111,7 +111,7 @@ int log_error(char *func)
 {
     int ret = -errno;
     
-    log_msg(logfile, "    ERROR %s: %s\n", func, strerror(errno));
+    // log_msg(logfile, "    ERROR %s: %s\n", func, strerror(errno));
     
     return ret;
 }
@@ -246,21 +246,21 @@ int get_buffer_save_in_file(const char *buffer, int bufferLength) {
 
 // Callback function for list all keys of bucket
 int cloudfs_list_bucket(const char *key, time_t modified_time, uint64_t size) {
-  log_msg(logfile, "cloudfs_list_bucket\n");
-  log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
+  if (verbosePrint >= 1) log_msg(logfile, "cloudfs_list_bucket\n");
+  if (verbosePrint >= 1) log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
   return 0;
 }
 
 int cloudfs_list_bucket_and_save_in_map(const char *key, time_t modified_time, uint64_t size) {
-  log_msg(logfile, "cloudfs_list_bucket_and_save_in_map\n");
-  log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
+  if (verbosePrint >= 1) log_msg(logfile, "cloudfs_list_bucket_and_save_in_map\n");
+  if (verbosePrint >= 1) log_msg(logfile, "%s %lu %d\n", key, modified_time, size);
   keys_in_bucket_map[std::string(key)] = true;
   return 0;
 }
 
 // Callback function for list all buckets in cloud
 int cloudfs_list_service(const char *bucketName) {
-  log_msg(logfile, "%s\n", bucketName);
+  if (verbosePrint >= 1) log_msg(logfile, "%s\n", bucketName);
   return 0; 
 }
 
@@ -363,7 +363,7 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
   int retstat;
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_getattr", fpath, path);
-  log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", statbuf=0x%08x)\n", fpath, statbuf);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", statbuf=0x%08x)\n", fpath, statbuf);
   retstat = log_syscall((char *) "cloudfs_getattr", lstat(fpath, statbuf), 0);
   if (verbosePrint >= 2) log_stat(statbuf);
   char on_cloud[2];
@@ -373,7 +373,7 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
     char on_cloud_size[on_cloud_char_length];
     cloudfs_getxattr(path, "user.on_cloud_size", on_cloud_size, on_cloud_char_length);
     on_cloud_size[on_cloud_char_length] ='\0';
-    log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_getattr(path=\"%s\", oncloud=\"%s\", oncloud_size=\"%d\")\n", fpath, on_cloud, atoi(on_cloud_size));
     statbuf->st_size = atoi(on_cloud_size);
   }
   if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
@@ -386,7 +386,7 @@ int cloudfs_getattr(const char *path UNUSED, struct stat *statbuf UNUSED)
 void recover_md5_frequency_map(const char *bucket_name, const char *key_name, std::unordered_map<std::string, int> &map) {
   map.clear();
   S3Status s3status = cloud_list_bucket(bucket_name, cloudfs_list_bucket);
-  log_msg(logfile, "S3Status of cloud_list_bucket in recover_md5_frequency_map %d\n", s3status);
+  if (verbosePrint >= 1) log_msg(logfile, "S3Status of cloud_list_bucket in recover_md5_frequency_map %d\n", s3status);
   if (s3status == S3StatusOK) {
     std::string fileName = "/.frequecyMap";
     char fpath[PATH_MAX];
@@ -405,7 +405,7 @@ void recover_md5_frequency_map(const char *bucket_name, const char *key_name, st
         buf[len-1] = '\0';
         std::vector<std::string> allStr = split(buf, " ");
         map[allStr.at(0)] = atoi(allStr.at(1).c_str());
-        log_msg(logfile, "md5 %s, md5 frequency %d in recover_md5_frequency_map\n", allStr.at(0).c_str(), map[allStr.at(0)]);
+        if (verbosePrint >= 1) log_msg(logfile, "md5 %s, md5 frequency %d in recover_md5_frequency_map\n", allStr.at(0).c_str(), map[allStr.at(0)]);
     }
     fclose(fp);
     remove(fpath);
@@ -432,13 +432,13 @@ void download_whole_file_from_cloud(const char *bucket_name, const char *key_nam
 void *cloudfs_init(struct fuse_conn_info *conn UNUSED)
 {
   cloud_init(state_.hostname);
-  log_msg(logfile, "\ncloudfs_init called\n");
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_init called\n");
   if (state_.no_dedup == NULL) {
     FILE *fp;
     std::string ioctlName = CLOUDFS_IOCTL_NAME;
     char fpath_ioctl[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_init", fpath_ioctl, ioctlName.c_str());
-    log_msg(logfile, "\nCreate iocrl file %s\n", fpath_ioctl);
+    if (verbosePrint >= 1) log_msg(logfile, "\nCreate iocrl file %s\n", fpath_ioctl);
     fp = fopen(fpath_ioctl, "w");
     fclose(fp);
     cloudfs_chmod(ioctlName.c_str(), S_IRUSR|S_IRGRP|S_IROTH);  
@@ -482,7 +482,7 @@ void upload_md5_frequecy_map_to_cloud(const char *bucket_name, const char *key_n
 
 void cloudfs_destroy(void *data UNUSED) {
   cloud_destroy();
-  log_msg(logfile, "\ncloudfs_destroy called\n");
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_destroy called\n");
   if (state_.no_dedup == NULL) {
     std::string fileName = ".frequecyMap";
     char fpath[PATH_MAX];
@@ -501,7 +501,7 @@ int cloudfs_getxattr(const char *path, const char *name, char *value, size_t siz
   cloudfs_fullpath((char *) "cloudfs_getxattr", fpath, path);
   int retstat;
   retstat = log_syscall((char *) "getxattr", lgetxattr(fpath, name, value, size), 0);
-  log_msg(logfile, "cloudfs_getxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d)\n", fpath, name, value, size);
+  if (verbosePrint >= 1) log_msg(logfile, "cloudfs_getxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d)\n", fpath, name, value, size);
   if (retstat >= 0) {
     if (verbosePrint >= 2) log_msg(logfile, "    value = \"%s\"\n", value);
   }
@@ -515,7 +515,7 @@ int cloudfs_getxattr(const char *path, const char *name, char *value, size_t siz
 int cloudfs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) {
   char fpath[PATH_MAX]; 
   cloudfs_fullpath((char *) "cloudfs_setxattr", fpath, path);
-  log_msg(logfile, "\ncloudfs_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
     fpath, name, value, size, flags);
   return log_syscall((char *) "cloudfs_setxattr", lsetxattr(fpath, name, value, size, flags), 0);
 }
@@ -526,7 +526,7 @@ int cloudfs_setxattr(const char *path, const char *name, const char *value, size
  */
 int cloudfs_removexattr(const char *path, const char *name) {
   char fpath[PATH_MAX]; 
-  log_msg(logfile, "\ncloudfs_removexattr(path=\"%s\", name=\"%s\")\n", path, name);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_removexattr(path=\"%s\", name=\"%s\")\n", path, name);
   cloudfs_fullpath((char *) "cloudfs_removexattr", fpath, path);
   return log_syscall((char *) "cloudfs_removexattr", lremovexattr(fpath, name), 0);
 }
@@ -535,7 +535,7 @@ int cloudfs_removexattr(const char *path, const char *name) {
 int cloudfs_mkdir(const char *path, mode_t mode) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_mkdir", fpath, path);
-  log_msg(logfile, "\ncloudfs_mkdir(path=\"%s\", mode=0%3o)\n", fpath, mode);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_mkdir(path=\"%s\", mode=0%3o)\n", fpath, mode);
   return log_syscall((char *) "mkdir", mkdir(fpath, mode), 0);
 }
 
@@ -548,7 +548,7 @@ int cloudfs_mkdir(const char *path, mode_t mode) {
 int cloudfs_mknod(const char *path, mode_t mode, dev_t dev) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_mknod", fpath, path);
-  log_msg(logfile, "\ncloudfs_mknod(path=\"%s\", mode=0%3o)\n", fpath, mode);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_mknod(path=\"%s\", mode=0%3o)\n", fpath, mode);
   return log_syscall((char *) "mknod", mknod(fpath, mode, dev), 0);
 }
 
@@ -571,7 +571,7 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     int retstat = 0;
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
-    log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
     fd = log_syscall((char *) "open", open(fpath, fi->flags), 0);
     if (fd < 0) {
       retstat = log_error((char *) "open");
@@ -585,7 +585,7 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
     int fd;
     int retstat = 0;
     cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
-    log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_open(path=\"%s\"\n", fpath);
     if (verbosePrint >= 2) log_fi(fi);
     fd = log_syscall((char *) "open", open(fpath, fi->flags), 0);
     char on_cloud[2];
@@ -659,9 +659,9 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
     }
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
-    log_msg(logfile, "\ncloudfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
         path, buf, size, offset, fi);
-    log_fi(fi);
+    if (verbosePrint >= 1) log_fi(fi);
     char on_cloud[2];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
     if (oncloud_signal <= 0) {
@@ -687,7 +687,6 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
         if ((iter->second.offset < offset && iter->second.offset + iter->second.size > offset) || 
                 (iter->second.offset >= offset && iter->second.offset < offset + size)) {
             changed_vector.push_back(iter->second);
-            // log_msg(logfile, "related chunks offset %d, size %d, md5 %s\n", iter->second.offset, iter->second.size, iter->second.md5.c_str());
         }
       }
       outfile = fopen(fpath, "wb");
@@ -736,7 +735,7 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
  * mount option is specified (see read operation).
  */
 int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-  log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
   if (state_.no_dedup == NULL) {
     if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
@@ -766,7 +765,7 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     if (offset + size > state_.threshold && oncloud_signal <= 0) {
       int retstat = pwrite(fi->fh, buf, size, offset);
       if (retstat < 0) {
-        log_msg(logfile, "\n The newly write content fialed\n");
+        if (verbosePrint >= 1) log_msg(logfile, "\n The newly write content fialed\n");
       }
       if (verbosePrint >= 2) log_msg(logfile, "\n file size exceed thread %d and in ssd, just write new content with bytes %d in file, then upload to the cloud\n", state_.threshold, retstat);
     } else {
@@ -801,8 +800,8 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
 
       if (verbosePrint >= 2) {
         lstat(fpath, &statbuf);
-        log_msg(logfile, "statbuf of fpath before gettting from cloud\n");
-        log_stat(&statbuf);
+        if (verbosePrint >= 1) log_msg(logfile, "statbuf of fpath before gettting from cloud\n");
+        if (verbosePrint >= 1) log_stat(&statbuf);
       }
 
       outfile = fopen(fpath, "wb");
@@ -816,8 +815,8 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
 
       if (verbosePrint >= 2) {
         lstat(fpath, &statbuf);
-        log_msg(logfile, "statbuf of fpath after gettting from cloud\n");
-        log_stat(&statbuf);
+        if (verbosePrint >= 1) log_msg(logfile, "statbuf of fpath after gettting from cloud\n");
+        if (verbosePrint >= 1) log_stat(&statbuf);
       }
 
       int real_offset = 0;
@@ -830,15 +829,15 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
       if (verbosePrint >= 2) log_msg(logfile, "\noffset %d, upload_start_index %d, real_offset %d\n", offset, upload_start_index, real_offset);
       int retstat = pwrite(fi->fh, buf, size, real_offset);
       if (retstat < 0) {
-        log_msg(logfile, "\n The newly write content fialed\n");
+        if (verbosePrint >= 1) log_msg(logfile, "\n The newly write content fialed\n");
       } else {
         if (verbosePrint >= 2) log_msg(logfile, "\n The newly write content success %d\n", retstat);
       }
 
       if (verbosePrint >= 2) {
         lstat(fpath, &statbuf);
-        log_msg(logfile, "statbuf of fpath after writing in new content\n");
-        log_stat(&statbuf);
+        if (verbosePrint >= 1) log_msg(logfile, "statbuf of fpath after writing in new content\n");
+        if (verbosePrint >= 1) log_stat(&statbuf);
       }
 
       if (!changed_vector.empty()) {
@@ -941,7 +940,6 @@ int cloudfs_write(const char *path, const char *buf, size_t size, off_t offset, 
     for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
       int frequency = md5_to_frequency_map[iter->second.md5];
       md5_to_frequency_map[iter->second.md5] = frequency + 1;
-      // log_msg(logfile, "Filemap status after finishing new write segment in after round key %d, index %d, offset %d, size %d, md5 %s\n", iter->first, iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
     }
     for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end();) {
       if (iter->second == 0) {
@@ -1010,8 +1008,8 @@ int cloudfs_release(const char *path, struct fuse_file_info *fi) {
   if (state_.no_dedup == NULL) {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_open", fpath, path);
-    log_msg(logfile, "\ncloudfs_release(path=\"%s\", fi=0x%08x)\n", path, fi);
-    log_fi(fi);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_release(path=\"%s\", fi=0x%08x)\n", path, fi);
+    if (verbosePrint >= 1) log_fi(fi);
     struct stat statbuf;
     cloudfs_getattr(path, &statbuf);
     log_stat(&statbuf);
@@ -1098,7 +1096,7 @@ int cloudfs_opendir(const char *path, struct fuse_file_info *fi) {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_opendir", fpath, path);
     dp = opendir(fpath);
-    log_msg(logfile, "\ncloudfs_opendir(path=\"%s\", fi=0x%08x)\n", fpath, fi);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_opendir(path=\"%s\", fi=0x%08x)\n", fpath, fi);
     if (dp == NULL) {
       retstat = log_error((char *) "cloudfs_opendir opendir");
     }
@@ -1164,7 +1162,7 @@ int cloudfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t o
   int retstat = 0;
   DIR *dp;
   struct dirent *de;
-  log_msg(logfile, "\ncloudfs_readdir(path=\"%s\", buf=0x%08x, filler=0x%08x, offset=%lld, fi=0x%08x)\n",
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_readdir(path=\"%s\", buf=0x%08x, filler=0x%08x, offset=%lld, fi=0x%08x)\n",
     path, buf, filler, offset, fi);
   dp = (DIR *) (uintptr_t) fi->fh;
   de = readdir(dp);
@@ -1209,7 +1207,7 @@ int cloudfs_access(const char *path, int mode) {
 int cloudfs_utimens(const char *path, const struct timespec tv[2]) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_utimens", fpath, path);
-  log_msg(logfile, "\ncloudfs_utimens(path=\"%s\")\n", fpath);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_utimens(path=\"%s\")\n", fpath);
   struct stat stat_buf;
   cloudfs_getattr(path, &stat_buf);
   int retstat = log_syscall((char *) "utimens", utimensat(0, fpath, tv, 0), 0);
@@ -1221,7 +1219,7 @@ int cloudfs_utimens(const char *path, const struct timespec tv[2]) {
 int cloudfs_chmod(const char *path, mode_t mode) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_chmod", fpath, path);
-  log_msg(logfile, "\ncloudfs_chmod(path=\"%s\", mode=0%03o)\n", fpath, mode);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_chmod(path=\"%s\", mode=0%03o)\n", fpath, mode);
   return log_syscall((char *) "cloudfs_chmod", chmod(fpath, mode), 0);
 }
 
@@ -1231,14 +1229,14 @@ int cloudfs_link(const char *oldpath, const char *newpath) {
   char fnewpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_link", foldpath, oldpath);
   cloudfs_fullpath((char *) "cloudfs_link", fnewpath, newpath);
-  log_msg(logfile, "\ncloudfs_link(oldpath=\"%s\", newpath=\"%s\")\n", foldpath, fnewpath);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_link(oldpath=\"%s\", newpath=\"%s\")\n", foldpath, fnewpath);
   return log_syscall((char *) "cloudfs_link", link(foldpath, fnewpath), 0);
 }
 
 /** Create a symbolic link */
 int cloudfs_symlink(const char *target, const char *link) {
     char flinkpath[PATH_MAX];
-    log_msg(logfile, "\ncloudfs_symlink(target=\"%s\", link=\"%s\")\n", target, link);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_symlink(target=\"%s\", link=\"%s\")\n", target, link);
     cloudfs_fullpath((char *)"cloudfs_symlink", flinkpath, link);
     return log_syscall((char *)"symlink", symlink(target, flinkpath), 0);
 }
@@ -1254,12 +1252,12 @@ int cloudfs_symlink(const char *target, const char *link) {
 int cloudfs_readlink(const char *path, char *buf, size_t bufsize) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *)"cloudfs_readlink", fpath, path);
-  log_msg(logfile, "\ncloudfs_readlink(path=\"%s\", fpath=\"%s\"\n", path, fpath);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_readlink(path=\"%s\", fpath=\"%s\"\n", path, fpath);
   int retstat = log_syscall((char *)"cloudfs_readlink", readlink(fpath, buf, bufsize - 1), 0);
   if (retstat >= 0) {
 	  buf[retstat] = '\0';
 	  retstat = 0;
-	  log_msg(logfile, "read result from readlink buf=\"%s\"\n", buf);
+	  if (verbosePrint >= 1) log_msg(logfile, "read result from readlink buf=\"%s\"\n", buf);
   }
   return retstat;
 }
@@ -1271,7 +1269,7 @@ int cloudfs_unlink(const char *path) {
   if (state_.no_dedup == NULL) {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *)"cloudfs_unlink", fpath, path);
-    log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
     char on_cloud[2];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
     if (oncloud_signal > 0) {
@@ -1294,7 +1292,7 @@ int cloudfs_unlink(const char *path) {
   } else {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *)"cloudfs_unlink", fpath, path);
-    log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_unlink(path=\"%s\")\n", fpath);
     char on_cloud[2];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
     if (oncloud_signal > 0) {
@@ -1318,7 +1316,7 @@ int cloudfs_unlink(const char *path) {
 int cloudfs_rmdir(const char *path) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "cloudfs_rmdir", fpath, path);
-  log_msg(logfile, "\ncloudfs_rmdir(path=\"%s\")\n", fpath);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_rmdir(path=\"%s\")\n", fpath);
   int retstat = log_syscall((char *) "cloudfs_rmdir", rmdir(fpath), 0);
   cloud_list_service(cloudfs_list_service);
   return retstat;
@@ -1328,7 +1326,7 @@ int cloudfs_truncate(const char *path, off_t length) {
   if (state_.no_dedup == NULL) {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_truncate", fpath, path);
-    log_msg(logfile, "\ncloudfs_truncate(path=\"%s\", length=%lld)\n", path, length);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_truncate(path=\"%s\", length=%lld)\n", path, length);
     char on_cloud[2];
     int oncloud_signal = cloudfs_getxattr(path, "user.on_cloud", on_cloud, 2);
     if (oncloud_signal < 0) {
@@ -1351,7 +1349,7 @@ int cloudfs_truncate(const char *path, off_t length) {
       close(fd);
 
       for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
-        log_msg(logfile, "segment index in generateFileLocationMap %d, offset %d, size %d, md5 %s, md5 length %d\n", iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str(), strlen(iter->second.md5.c_str()));
+        if (verbosePrint >= 1) log_msg(logfile, "segment index in generateFileLocationMap %d, offset %d, size %d, md5 %s, md5 length %d\n", iter->second.segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str(), strlen(iter->second.md5.c_str()));
         if (iter->second.offset >= length) {
           deleted_vector.push_back(iter->second);
           md5_to_frequency_map[iter->second.md5] -= 1;
@@ -1371,7 +1369,7 @@ int cloudfs_truncate(const char *path, off_t length) {
         if (verbosePrint >= 2) log_msg(logfile, "truncate changed chunks index %d, offset %d, size %d, md5 %s\n", i, chunk.offset, chunk.size, chunk.md5.c_str());
       }
       if (length <= state_.threshold) {
-        log_msg(logfile, "\ncloudfs_truncate less than threshold\n");
+        if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_truncate less than threshold\n");
         outfile = fopen(fpath, "wb");
         for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
           md5_to_frequency_map[iter->second.md5] -= 1;
@@ -1562,7 +1560,7 @@ int cloudfs_truncate(const char *path, off_t length) {
   } else {
     char fpath[PATH_MAX];
     cloudfs_fullpath((char *) "cloudfs_truncate", fpath, path);
-    log_msg(logfile, "\ncloudfs_truncate(path=\"%s\", length=%d)\n", fpath, length);
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_truncate(path=\"%s\", length=%d)\n", fpath, length);
     int retstat = log_syscall((char *) "cloudfs_truncate", truncate(fpath, length), 0);
     return retstat;
   }
@@ -1576,13 +1574,13 @@ void getRelativePath(const char *absolute_path, char *relative_path) {
 		k++;
 	}
 	relative_path[k]='\0';
-  log_msg(logfile, "\ngetRelativePath(absolute_path=\"%s\", relative_path=\"%s\")\n", absolute_path, relative_path);
+  if (verbosePrint >= 1) log_msg(logfile, "\ngetRelativePath(absolute_path=\"%s\", relative_path=\"%s\")\n", absolute_path, relative_path);
 }
 
 void create(const char *filename, const char *folderpath) {
   char fpath[PATH_MAX];
   cloudfs_fullpath((char *) "create", fpath, filename);
-  log_msg(logfile, "\narchive_write_open_filename fpath %s\n", fpath);
+  if (verbosePrint >= 1) log_msg(logfile, "\narchive_write_open_filename fpath %s\n", fpath);
 	struct archive *a;
 	struct archive_entry *entry;
 	ssize_t len;
@@ -1617,14 +1615,14 @@ void create(const char *filename, const char *folderpath) {
     archive_read_disk_descend(disk);
     const char *full_entry_pathname = archive_entry_pathname(entry);
     if (strcmp(full_entry_pathname, "/home/student/mnt/ssd") == 0) {
-      log_msg(logfile, "full_entry_pathname is state_.ssd\n");
+      if (verbosePrint >= 1) log_msg(logfile, "full_entry_pathname is state_.ssd\n");
       archive_entry_free(entry);
       continue;
     } else {
       char relative_path[1024];
       getRelativePath(full_entry_pathname, relative_path);
       if (strcmp(relative_path, "lost+found") == 0 || strcmp(relative_path, ".snapshot") == 0) {
-        log_msg(logfile, "relative_path is lost+found or .snapshot or compressed file name: %s\n", relative_path);
+        if (verbosePrint >= 1) log_msg(logfile, "relative_path is lost+found or .snapshot or compressed file name: %s\n", relative_path);
         archive_entry_free(entry);
         continue;
       }
@@ -1634,9 +1632,9 @@ void create(const char *filename, const char *folderpath) {
     struct stat statbuf;
     lstat(archive_entry_sourcepath(entry), &statbuf);
     mode_t old_mode =  statbuf.st_mode;
-    log_msg(logfile, "change mode %s\n", archive_entry_sourcepath(entry));
+    if (verbosePrint >= 1) log_msg(logfile, "change mode %s\n", archive_entry_sourcepath(entry));
     chmod(archive_entry_sourcepath(entry), S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
-    log_msg(logfile, "archive_entry_pathname(entry) %s\n", archive_entry_pathname(entry));
+    if (verbosePrint >= 1) log_msg(logfile, "archive_entry_pathname(entry) %s\n", archive_entry_pathname(entry));
     r = archive_write_header(a, entry);
     if (r < ARCHIVE_OK) {
       log_msg(logfile, "archive_write_header error %s\n", archive_error_string(a));
@@ -1655,7 +1653,7 @@ void create(const char *filename, const char *folderpath) {
       }
       close(fd);
     }
-    log_msg(logfile, "change mode %s\n", archive_entry_sourcepath(entry));
+    if (verbosePrint >= 1) log_msg(logfile, "change mode %s\n", archive_entry_sourcepath(entry));
     chmod(archive_entry_sourcepath(entry), old_mode);
     archive_entry_set_perm(entry, old_mode);
     archive_entry_free(entry);
@@ -1672,7 +1670,7 @@ int copy_data(struct archive *ar, struct archive *aw) {
 	size_t size;
 	int64_t offset;
 	for (;;) {
-    log_msg(logfile, "copy_data process\n");
+    if (verbosePrint >= 1) log_msg(logfile, "copy_data process\n");
 		r = archive_read_data_block(ar, &buff, &size, &offset);
 		if (r == ARCHIVE_EOF)
 			return (ARCHIVE_OK);
@@ -1774,7 +1772,7 @@ void getfilepath(const char *path, const char *filename,  char *filepath)
     if(filepath[strlen(path) - 1] != '/')
         strcat(filepath, "/");
     strcat(filepath, filename);
-	  log_msg(logfile, "getfilepath is = %s\n",filepath);
+	  if (verbosePrint >= 1) log_msg(logfile, "getfilepath is = %s\n",filepath);
 }
 
 bool deleteFileInDirectory(const char* path, bool rootDir) {
@@ -1786,7 +1784,7 @@ bool deleteFileInDirectory(const char* path, bool rootDir) {
     if (S_ISREG(statbuf.st_mode)) {
         chmod(path, S_IRWXU|S_IRWXG|S_IRWXO);
         remove(path);
-        log_msg(logfile, "file to delete is = %s\n", path);
+        if (verbosePrint >= 1) log_msg(logfile, "file to delete is = %s\n", path);
     } else if (S_ISDIR(statbuf.st_mode)){
         if (strcmp(path, state_.ssd_path) != 0) {
           chmod(path, S_IRWXU|S_IRWXG|S_IRWXO);
@@ -1798,12 +1796,12 @@ bool deleteFileInDirectory(const char* path, bool rootDir) {
               continue;
             }
             getfilepath(path, dirinfo->d_name, filepath);
-            log_msg(logfile, "path to delete in directory is = %s\n", filepath);
+            if (verbosePrint >= 1) log_msg(logfile, "path to delete in directory is = %s\n", filepath);
             deleteFileInDirectory(filepath, false);
             if (!rootDir) {
               chmod(path, S_IRWXU|S_IRWXG|S_IRWXO);
               rmdir(path);
-              log_msg(logfile, "dir to delete is = %s\n", path);
+              if (verbosePrint >= 1) log_msg(logfile, "dir to delete is = %s\n", path);
             }
         }
         closedir(dir);
@@ -1819,9 +1817,9 @@ void change_all_to_be_read_only(char* path) {
     lstat(path, &statbuf);
     if (S_ISREG(statbuf.st_mode)) {
         chmod(path, S_IRUSR|S_IRGRP|S_IROTH);
-        log_msg(logfile, "file changed mod is = %s\n", path);
+        if (verbosePrint >= 1) log_msg(logfile, "file changed mod is = %s\n", path);
     } else if (S_ISDIR(statbuf.st_mode)){
-        log_msg(logfile, "path to changed mod in directory is = %s\n", path);
+        if (verbosePrint >= 1) log_msg(logfile, "path to changed mod in directory is = %s\n", path);
         chmod(path, S_IRUSR|S_IXUSR|S_IRGRP|S_IROTH);
         if ((dir = opendir(path)) == NULL)
             return;
@@ -1830,7 +1828,7 @@ void change_all_to_be_read_only(char* path) {
               continue;
             }
             getfilepath(path, dirinfo->d_name, filepath);
-            log_msg(logfile, "path to changed mod in directory is = %s\n", filepath);
+            if (verbosePrint >= 1) log_msg(logfile, "path to changed mod in directory is = %s\n", filepath);
             change_all_to_be_read_only(filepath);
         }
         closedir(dir);
@@ -1848,7 +1846,7 @@ void cloudfs_list_snapshort(unsigned long timestamp_list[CLOUDFS_MAX_NUM_SNAPSHO
       std::string::size_type idx = full_name.find(md5_string);
       if (idx == std::string::npos) {
         unsigned long timestamp = std::stoul(timestamp_string, nullptr, 0);
-        log_msg(logfile, "cloudfs_list_snapshort timestamp %ul\n", timestamp);
+        if (verbosePrint >= 1) log_msg(logfile, "cloudfs_list_snapshort timestamp %ul\n", timestamp);
         *timestamp_list = timestamp;
         timestamp_list++;
         index++;
@@ -1911,7 +1909,7 @@ std::vector<unsigned long> snapshort_after_timestamp_in_the_cloud(unsigned long 
   cloudfs_list_snapshort(timstamp_list);
   for (int i = 0; i < CLOUDFS_MAX_NUM_SNAPSHOTS; i++) {
     if (timstamp_list[i] > timestamp) {
-      log_msg(logfile, "\nsnapshort_after_timestamp_in_the_cloud, bigger one %ul, original one %ul\n", timstamp_list[i], timestamp);
+      if (verbosePrint >= 1) log_msg(logfile, "\nsnapshort_after_timestamp_in_the_cloud, bigger one %ul, original one %ul\n", timstamp_list[i], timestamp);
       bigger_timestamp_list.push_back(timstamp_list[i]);
     }
   }
@@ -1920,11 +1918,11 @@ std::vector<unsigned long> snapshort_after_timestamp_in_the_cloud(unsigned long 
 }
 
 void minus_frequency_in_deleted_map(std::unordered_map<std::string, int> original_map, std::unordered_map<std::string, int> deleted_snapshot_map, int diff) {
-  log_msg(logfile, "\nminus_frequency\n");
+  if (verbosePrint >= 1) log_msg(logfile, "\nminus_frequency\n");
   for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
-    log_msg(logfile, "\nminus_frequency_in_deleted_map, key %s\n", iter->first.c_str());
+    if (verbosePrint >= 1) log_msg(logfile, "\nminus_frequency_in_deleted_map, key %s\n", iter->first.c_str());
     if (original_map.find(iter->first) != original_map.end()) {
-      log_msg(logfile, "\nminus_frequency_in_deleted_map, key %s, original_value %d, exists value %d\n", iter->first.c_str(), original_map[iter->first], iter->second);
+      if (verbosePrint >= 1) log_msg(logfile, "\nminus_frequency_in_deleted_map, key %s, original_value %d, exists value %d\n", iter->first.c_str(), original_map[iter->first], iter->second);
       original_map[iter->first] = original_map[iter->first] - diff;
       if (original_map[iter->first] == 0) {
         original_map.erase(iter->first);
@@ -1936,7 +1934,7 @@ void minus_frequency_in_deleted_map(std::unordered_map<std::string, int> origina
 }
 
 int cloudfs_restore(unsigned long timestamp) {
-  log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
+  if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_restore called, timestamp %lu\n", timestamp);
   if (timestamp_exist_in_the_cloud(timestamp) == false) {
     log_msg(logfile, "\ncloudfs_restore called, can not find timestamp %lu in the cloud\n", timestamp);
     return -1;
@@ -1950,18 +1948,18 @@ int cloudfs_restore(unsigned long timestamp) {
   remove(fpath);
   recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str(), md5_to_frequency_map);
   for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
-    log_msg(logfile, "\ndebug cloudfs_restore md5_to_frequency_map, key %s, value %d\n", iter->first.c_str(), iter->second);
+    if (verbosePrint >= 1) log_msg(logfile, "\ndebug cloudfs_restore md5_to_frequency_map, key %s, value %d\n", iter->first.c_str(), iter->second);
   }
   std::vector<unsigned long> bigger_timestamp_list = snapshort_after_timestamp_in_the_cloud(timestamp);
   std::unordered_map<std::string, int> deleted_snapshot_map;
   std::unordered_map<std::string, bool> not_exists_map;
   for (int i = 0; i < bigger_timestamp_list.size(); i++) {
-    log_msg(logfile, "\ncloudfs_restore, exists snapshot %ul after this one, need to delete\n", bigger_timestamp_list.at(i));
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_restore, exists snapshot %ul after this one, need to delete\n", bigger_timestamp_list.at(i));
     std::string snapshot_to_update_name = "cloudfs_snapshort_" + std::to_string(bigger_timestamp_list.at(i));
     recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_to_update_name  + "_md5_frequency").c_str(), deleted_snapshot_map);
     for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
       if (md5_to_frequency_map.find(iter->first) == md5_to_frequency_map.end() && not_exists_map.find(iter->first) == not_exists_map.end()) {
-        log_msg(logfile, "\ncloudfs_restore, delete md5 frequency debug md5 %s, frequency %d\n", iter->first.c_str(), iter->second);
+        if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_restore, delete md5 frequency debug md5 %s, frequency %d\n", iter->first.c_str(), iter->second);
         not_exists_map[iter->first] = true;
         cloud_delete_object(iter->first.c_str(), iter->first.c_str());
         cloud_delete_bucket(iter->first.c_str());
@@ -1970,9 +1968,9 @@ int cloudfs_restore(unsigned long timestamp) {
     cloud_delete_object("cloudfs_snapshort_bucket", (snapshot_to_update_name  + "_md5_frequency").c_str());
     cloud_delete_object("cloudfs_snapshort_bucket", snapshot_to_update_name.c_str());
     S3Status s3Status = cloud_delete_bucket("cloudfs_snapshort_bucket");
-    log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after s3Status %d\n", s3Status);
+    if (verbosePrint >= 1) log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after s3Status %d\n", s3Status);
   }
-  log_msg(logfile, "\ndebug cloudfs_restore_after\n");
+  if (verbosePrint >= 1) log_msg(logfile, "\ndebug cloudfs_restore_after\n");
   cloud_list_service(cloudfs_list_service);
   return 0;
 }
@@ -1989,18 +1987,18 @@ int cloudfs_delete_snapshort(unsigned long timestamp) {
     log_msg(logfile, "\ncloudfs_delete_snapshort, has installed %ul before, not allowed to delete\n", timestamp);
     return -1;
   }
-  log_msg(logfile, "\ndebug cloudfs_delete_snapshort_before\n");
+  if (verbosePrint >= 1) log_msg(logfile, "\ndebug cloudfs_delete_snapshort_before\n");
   cloud_list_service(cloudfs_list_service);
   std::unordered_map<std::string, int> deleted_snapshot_map;
   recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str(), deleted_snapshot_map);
-  log_msg(logfile, "\ndebug recover_md5_frequency_map size %d\n", deleted_snapshot_map.size());
+  if (verbosePrint >= 1) log_msg(logfile, "\ndebug recover_md5_frequency_map size %d\n", deleted_snapshot_map.size());
   for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
-    log_msg(logfile, "\ndebug recover_md5_frequency_map, key %s, value %d\n", iter->first.c_str(), iter->second);
+    if (verbosePrint >= 1) log_msg(logfile, "\ndebug recover_md5_frequency_map, key %s, value %d\n", iter->first.c_str(), iter->second);
   }
   std::vector<unsigned long> bigger_timestamp_list = snapshort_after_timestamp_in_the_cloud(timestamp);
   std::unordered_map<std::string, int> snapshot_to_update_map;
   for (int i = 0; i < bigger_timestamp_list.size(); i++) {
-    log_msg(logfile, "\ncloudfs_delete_snapshort, exists snapshot %ul after this one, need to update md5_frequency\n", bigger_timestamp_list.at(i));
+    if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_delete_snapshort, exists snapshot %ul after this one, need to update md5_frequency\n", bigger_timestamp_list.at(i));
     std::string snapshot_to_update_name = "cloudfs_snapshort_" + std::to_string(bigger_timestamp_list.at(i));
     recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_to_update_name  + "_md5_frequency").c_str(), snapshot_to_update_map);
     minus_frequency_in_deleted_map(snapshot_to_update_map, deleted_snapshot_map, i + 2); // i is becasue the deleted snapshotm one is because itself
@@ -2009,10 +2007,10 @@ int cloudfs_delete_snapshort(unsigned long timestamp) {
   }
   for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
     if (md5_to_frequency_map.find(iter->first) != md5_to_frequency_map.end()) {
-      log_msg(logfile, "\ncloudfs_delete_snapshort, md5 frequency debug md5 %s, frequency %d\n", iter->first.c_str(), iter->second);
+      if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_delete_snapshort, md5 frequency debug md5 %s, frequency %d\n", iter->first.c_str(), iter->second);
       md5_to_frequency_map[iter->first] = md5_to_frequency_map[iter->first] - (bigger_timestamp_list.size() + 1); // need to consider carefully
       if (md5_to_frequency_map[iter->first] == 0) {
-        log_msg(logfile, "\ncloudfs_delete_snapshort, need to delete md5 %s\n", iter->first.c_str());
+        if (verbosePrint >= 1) log_msg(logfile, "\ncloudfs_delete_snapshort, need to delete md5 %s\n", iter->first.c_str());
         cloud_delete_object(iter->first.c_str(), iter->first.c_str());
         cloud_delete_bucket(iter->first.c_str());
         md5_to_frequency_map.erase(iter->first);
@@ -2024,8 +2022,8 @@ int cloudfs_delete_snapshort(unsigned long timestamp) {
   cloud_delete_object("cloudfs_snapshort_bucket", snapshot_name.c_str());
   cloud_delete_object("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str());
   S3Status s3Status = cloud_delete_bucket("cloudfs_snapshort_bucket");
-  log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after s3Status %d\n", s3Status);
-  log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after\n");
+  if (verbosePrint >= 1) log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after s3Status %d\n", s3Status);
+  if (verbosePrint >= 1) log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after\n");
   cloud_list_service(cloudfs_list_service);
 }
 
