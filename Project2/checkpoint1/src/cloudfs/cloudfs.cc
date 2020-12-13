@@ -1911,7 +1911,7 @@ std::vector<unsigned long> snapshort_after_timestamp_in_the_cloud(unsigned long 
   cloudfs_list_snapshort(timstamp_list);
   for (int i = 0; i < CLOUDFS_MAX_NUM_SNAPSHOTS; i++) {
     if (timstamp_list[i] > timestamp) {
-      log_msg(logfile, "\ncloudfs_delete_snapshort, snapshort_after_timestamp_in_the_cloud, bigger one %ul, original one %ul\n", timstamp_list[i], timestamp);
+      log_msg(logfile, "\nsnapshort_after_timestamp_in_the_cloud, bigger one %ul, original one %ul\n", timstamp_list[i], timestamp);
       bigger_timestamp_list.push_back(timstamp_list[i]);
     }
   }
@@ -1949,19 +1949,20 @@ int cloudfs_restore(unsigned long timestamp) {
   cloudfs_fullpath((char *) "cloudfs_restore", fpath, ("/" + snapshot_name).c_str());
   remove(fpath);
   recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_name  + "_md5_frequency").c_str(), md5_to_frequency_map);
-
   for (std::unordered_map<std::string, int>::iterator iter = md5_to_frequency_map.begin(); iter != md5_to_frequency_map.end(); iter++) {
     log_msg(logfile, "\ndebug cloudfs_restore md5_to_frequency_map, key %s, value %d\n", iter->first.c_str(), iter->second);
   }
   std::vector<unsigned long> bigger_timestamp_list = snapshort_after_timestamp_in_the_cloud(timestamp);
   std::unordered_map<std::string, int> deleted_snapshot_map;
+  std::unordered_map<std::string, bool> not_exists_map;
   for (int i = 0; i < bigger_timestamp_list.size(); i++) {
     log_msg(logfile, "\ncloudfs_restore, exists snapshot %ul after this one, need to delete\n", bigger_timestamp_list.at(i));
     std::string snapshot_to_update_name = "cloudfs_snapshort_" + std::to_string(bigger_timestamp_list.at(i));
     recover_md5_frequency_map("cloudfs_snapshort_bucket", (snapshot_to_update_name  + "_md5_frequency").c_str(), deleted_snapshot_map);
     for (std::unordered_map<std::string, int>::iterator iter = deleted_snapshot_map.begin(); iter != deleted_snapshot_map.end(); iter++) {
-      if (md5_to_frequency_map.find(iter->first) == md5_to_frequency_map.end()) {
+      if (md5_to_frequency_map.find(iter->first) == md5_to_frequency_map.end() && not_exists_map.find(iter->first) == not_exists_map.end()) {
         log_msg(logfile, "\ncloudfs_restore, delete md5 frequency debug md5 %s, frequency %d\n", iter->first.c_str(), iter->second);
+        not_exists_map[iter->first] = true;
         cloud_delete_object(iter->first.c_str(), iter->first.c_str());
         cloud_delete_bucket(iter->first.c_str());
       }
@@ -1971,6 +1972,8 @@ int cloudfs_restore(unsigned long timestamp) {
     S3Status s3Status = cloud_delete_bucket("cloudfs_snapshort_bucket");
     log_msg(logfile, "\ndebug cloudfs_delete_snapshort_after s3Status %d\n", s3Status);
   }
+  log_msg(logfile, "\ndebug cloudfs_restore_after\n");
+  cloud_list_service(cloudfs_list_service);
   return 0;
 }
 

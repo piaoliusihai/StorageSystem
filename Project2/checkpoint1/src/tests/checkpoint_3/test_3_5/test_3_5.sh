@@ -68,6 +68,7 @@ function execute_part3_tests()
 
    echo "Deleting files"
    rm $TESTDIR/largefile
+   cd $TESTDIR && ls -lR
    sleep 1
 
    # create a snapshot
