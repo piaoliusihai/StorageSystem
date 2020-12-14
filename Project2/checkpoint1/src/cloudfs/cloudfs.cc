@@ -72,7 +72,7 @@ void log_msg(FILE *logfile, const char *format, ...)
 
 // Compute absolute path from path and saved result in fpath
 void cloudfs_fullpath(char *func, char fpath[PATH_MAX], const char *path)
-{
+{   
     strcpy(fpath, state_.ssd_path);
     strncat(fpath, path + 1, strlen(path) - 1);
     log_msg(logfile, "\ncloudfs_fullpath:  func= \"%s\", rootdir = \"%s\", path = \"%s\", fpath = \"%s\"\n", func, state_.ssd_path, path, fpath);
@@ -134,47 +134,48 @@ int log_syscall(char *func, int retstat, int min_ret)
 // <bits/stat.h>; this is indirectly included from <fcntl.h>
 void log_stat(struct stat *si)
 {
-  log_msg(logfile, "    si:\n");
+  if (verbosePrint > 5) {
+    log_msg(logfile, "    si:\n");
+      
+      //  dev_t     st_dev;     /* ID of device containing file */
+    log_struct(si, st_dev, %lld, );
     
-    //  dev_t     st_dev;     /* ID of device containing file */
-	log_struct(si, st_dev, %lld, );
-	
-    //  ino_t     st_ino;     /* inode number */
-	log_struct(si, st_ino, %lld, );
-	
-    //  mode_t    st_mode;    /* protection */
-	log_struct(si, st_mode, 0%o, );
-	
-    //  nlink_t   st_nlink;   /* number of hard links */
-	log_struct(si, st_nlink, %d, );
-	
-    //  uid_t     st_uid;     /* user ID of owner */
-	log_struct(si, st_uid, %d, );
-	
-    //  gid_t     st_gid;     /* group ID of owner */
-	log_struct(si, st_gid, %d, );
-	
-    //  dev_t     st_rdev;    /* device ID (if special file) */
-	log_struct(si, st_rdev, %lld,  );
-	
-    //  off_t     st_size;    /* total size, in bytes */
-	log_struct(si, st_size, %lld,  );
-	
-    //  blksize_t st_blksize; /* blocksize for filesystem I/O */
-	log_struct(si, st_blksize, %ld,  );
-	
-    //  blkcnt_t  st_blocks;  /* number of blocks allocated */
-	log_struct(si, st_blocks, %lld,  );
+      //  ino_t     st_ino;     /* inode number */
+    log_struct(si, st_ino, %lld, );
+    
+      //  mode_t    st_mode;    /* protection */
+    log_struct(si, st_mode, 0%o, );
+    
+      //  nlink_t   st_nlink;   /* number of hard links */
+    log_struct(si, st_nlink, %d, );
+    
+      //  uid_t     st_uid;     /* user ID of owner */
+    log_struct(si, st_uid, %d, );
+    
+      //  gid_t     st_gid;     /* group ID of owner */
+    log_struct(si, st_gid, %d, );
+    
+      //  dev_t     st_rdev;    /* device ID (if special file) */
+    log_struct(si, st_rdev, %lld,  );
+    
+      //  off_t     st_size;    /* total size, in bytes */
+    log_struct(si, st_size, %lld,  );
+    
+      //  blksize_t st_blksize; /* blocksize for filesystem I/O */
+    log_struct(si, st_blksize, %ld,  );
+    
+      //  blkcnt_t  st_blocks;  /* number of blocks allocated */
+    log_struct(si, st_blocks, %lld,  );
 
-    //  time_t    st_atime;   /* time of last access */
-	log_struct(si, st_atime, 0x%08lx, );
+      //  time_t    st_atime;   /* time of last access */
+    log_struct(si, st_atime, 0x%08lx, );
 
-    //  time_t    st_mtime;   /* time of last modification */
-	log_struct(si, st_mtime, 0x%08lx, );
+      //  time_t    st_mtime;   /* time of last modification */
+    log_struct(si, st_mtime, 0x%08lx, );
 
-    //  time_t    st_ctime;   /* time of last status change */
-	log_struct(si, st_ctime, 0x%08lx, );
-	
+      //  time_t    st_ctime;   /* time of last status change */
+    log_struct(si, st_ctime, 0x%08lx, );
+  }
 }
 
 // Copied from reference code https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/
@@ -184,42 +185,44 @@ void log_stat(struct stat *si)
 // Duplicated here for convenience.
 void log_fi (struct fuse_file_info *fi)
 {
+  if (verbosePrint > 5) {
     log_msg(logfile, "    fi:\n");
+      
+      /** Open flags.  Available in open() and release() */
+      //	int flags;
+    log_struct(fi, flags, 0x%08x, );
     
-    /** Open flags.  Available in open() and release() */
-    //	int flags;
-	log_struct(fi, flags, 0x%08x, );
-	
-    /** Old file handle, don't use */
-    //	unsigned long fh_old;	
-	log_struct(fi, fh_old, 0x%08lx,  );
+      /** Old file handle, don't use */
+      //	unsigned long fh_old;	
+    log_struct(fi, fh_old, 0x%08lx,  );
 
-    /** In case of a write operation indicates if this was caused by a
-        writepage */
-    //	int writepage;
-	log_struct(fi, writepage, %d, );
+      /** In case of a write operation indicates if this was caused by a
+          writepage */
+      //	int writepage;
+    log_struct(fi, writepage, %d, );
 
-    /** Can be filled in by open, to use direct I/O on this file.
-        Introduced in version 2.4 */
-    //	unsigned int keep_cache : 1;
-	log_struct(fi, direct_io, %d, );
+      /** Can be filled in by open, to use direct I/O on this file.
+          Introduced in version 2.4 */
+      //	unsigned int keep_cache : 1;
+    log_struct(fi, direct_io, %d, );
 
-    /** Can be filled in by open, to indicate, that cached file data
-        need not be invalidated.  Introduced in version 2.4 */
-    //	unsigned int flush : 1;
-	log_struct(fi, keep_cache, %d, );
+      /** Can be filled in by open, to indicate, that cached file data
+          need not be invalidated.  Introduced in version 2.4 */
+      //	unsigned int flush : 1;
+    log_struct(fi, keep_cache, %d, );
 
-    /** Padding.  Do not use*/
-    //	unsigned int padding : 29;
+      /** Padding.  Do not use*/
+      //	unsigned int padding : 29;
 
-    /** File handle.  May be filled in by filesystem in open().
-        Available in all other file operations */
-    //	uint64_t fh;
-	log_struct(fi, fh, 0x%016llx,  );
-	
-    /** Lock owner id.  Available in locking operations and flush */
-    //  uint64_t lock_owner;
-	log_struct(fi, lock_owner, 0x%016llx, );
+      /** File handle.  May be filled in by filesystem in open().
+          Available in all other file operations */
+      //	uint64_t fh;
+    log_struct(fi, fh, 0x%016llx,  );
+    
+      /** Lock owner id.  Available in locking operations and flush */
+      //  uint64_t lock_owner;
+    log_struct(fi, lock_owner, 0x%016llx, );
+  }
 }
 
 // Callback function for putting content to cloud
@@ -305,7 +308,7 @@ std::map<int, file_content_index> generateFileLocationMap(const char *path) {
   if (oncloud_signal <= 0) {
     return file_info_map;
   } else {
-    if (verbosePrint >= 2) log_msg(logfile, "generateFileLocationMap debug\n");
+    if (verbosePrint >= 4) log_msg(logfile, "generateFileLocationMap debug\n");
     char buf[1024];  
     FILE *fp;            
     int len;         
@@ -344,7 +347,7 @@ void saveInfoInMapToFile(const char *path, std::map<int, file_content_index> fil
   }
   for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
     std::string line = std::to_string(segment_index) + std::string(" ") + std::to_string(iter->second.offset) + std::string(" ") + std::to_string(iter->second.size) + std::string(" ") + iter->second.md5  + std::string(" ") + std::to_string(iter->second.complete);
-    if (verbosePrint >= 3) log_msg(logfile, "Saving file info from map to file index %d, offset %d, size %d, md5 %s\n", segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
+    if (verbosePrint >= 4) log_msg(logfile, "Saving file info from map to file index %d, offset %d, size %d, md5 %s\n", segment_index, iter->second.offset, iter->second.size, iter->second.md5.c_str());
     fprintf(fptr,"%s\n", line.c_str());
     segment_index++;
   }
@@ -653,6 +656,9 @@ int cloudfs_open(const char *path, struct fuse_file_info *fi) {
  * and write into file.
  */
 int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+  if (strcmp(path, "/mediumfile") == 0) {
+    verbosePrint = 3;
+  }
   if (state_.no_dedup == NULL) {
     if (strcmp(path, CLOUDFS_IOCTL_NAME) == 0) {
       return -1;
@@ -677,19 +683,28 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
       cloudfs_chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 
       std::map<int, file_content_index> file_map = generateFileLocationMap(path);
+
+      log_msg(logfile, "debug1\n");
       int fd = open(fpath, O_RDWR);
       ftruncate(fd,0);
       lseek(fd,0,SEEK_SET);
       close(fd);
+      log_msg(logfile, "debug2\n");
 
       std::deque<file_content_index> changed_vector;
       for (std::map<int, file_content_index>::iterator iter = file_map.begin(); iter != file_map.end(); iter++) {
         if ((iter->second.offset < offset && iter->second.offset + iter->second.size > offset) || 
                 (iter->second.offset >= offset && iter->second.offset < offset + size)) {
             changed_vector.push_back(iter->second);
-            // log_msg(logfile, "related chunks offset %d, size %d, md5 %s\n", iter->second.offset, iter->second.size, iter->second.md5.c_str());
+            log_msg(logfile, "related chunks offset %d, size %d, md5 %s\n", iter->second.offset, iter->second.size, iter->second.md5.c_str());
         }
       }
+
+      if (changed_vector.size() == 0) {
+        log_msg(logfile, "no realted chunk");
+        return 0;
+      }
+      log_msg(logfile, "debug3\n");
       outfile = fopen(fpath, "wb");
       for (int i = 0; i < changed_vector.size(); i++) {
         file_content_index chunk = changed_vector.at(i);
@@ -698,10 +713,12 @@ int cloudfs_read(const char *path, char *buf, size_t size, off_t offset, struct 
         cloud_get_object(chunk.md5.c_str(), chunk.md5.c_str(), get_buffer_save_in_file);
       }
       fclose(outfile);
+      log_msg(logfile, "debug4\n");
       
       int real_offset = offset - changed_vector.at(0).offset;
       if (verbosePrint >= 2) log_msg(logfile, "\noffset %d, changed_vector.at(0).offset %d, real_offset %d\n", offset, changed_vector.at(0).offset, real_offset);
       int restat = log_syscall((char *) "cloudfs_read", pread(fi->fh, buf, size, real_offset), 0);
+
 
       fd = open(fpath, O_RDWR);
       ftruncate(fd,0);
